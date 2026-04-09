@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 
 export type Comment = {
   id: string
@@ -46,6 +46,7 @@ function decodeJwtPayload(token: string): unknown {
 }
 
 function AppLayout() {
+  const navigate = useNavigate()
   const [posts, setPosts] = useState<Post[]>([])
   const [following, setFollowing] = useState<Set<string>>(() => new Set())
   const [token, setTokenState] = useState<string | null>(() => localStorage.getItem('musart_token'))
@@ -85,6 +86,16 @@ function AppLayout() {
       .catch(() => setPosts([]))
   }, [token])
 
+  useEffect(() => {
+    if (!token) {
+      setFollowing(new Set())
+      return
+    }
+    api<{ following: string[] }>('/api/me/following')
+      .then((d) => setFollowing(new Set(d.following)))
+      .catch(() => setFollowing(new Set()))
+  }, [token])
+
   function toggleFollow(author: string) {
     setFollowing((prev) => {
       const next = new Set(prev)
@@ -92,6 +103,23 @@ function AppLayout() {
       else next.add(author)
       return next
     })
+    api<{ following: boolean }>(`/api/follow/${encodeURIComponent(author)}/toggle`, { method: 'POST', body: '{}' })
+      .then((r) => {
+        setFollowing((prev) => {
+          const next = new Set(prev)
+          if (r.following) next.add(author)
+          else next.delete(author)
+          return next
+        })
+      })
+      .catch(() => {
+        setFollowing((prev) => {
+          const next = new Set(prev)
+          if (next.has(author)) next.delete(author)
+          else next.add(author)
+          return next
+        })
+      })
   }
 
   function toggleLike(postId: string) {
@@ -161,7 +189,17 @@ function AppLayout() {
               <NavLink className={({ isActive }) => `side-link${isActive ? ' active' : ''}`} to="/app/mensajes">Mensajes</NavLink>
               <NavLink className={({ isActive }) => `side-link${isActive ? ' active' : ''}`} to="/app/perfil">Perfil</NavLink>
               <NavLink className={({ isActive }) => `side-link${isActive ? ' active' : ''}`} to="/app/crear">Crear</NavLink>
-              <Link className="side-link" to="/">Cerrar sesión</Link>
+              <button
+                className="side-link"
+                type="button"
+                onClick={() => {
+                  setToken(null)
+                  navigate('/', { replace: true })
+                }}
+                style={{ border: 'none', background: 'transparent', textAlign: 'left' }}
+              >
+                Cerrar sesión
+              </button>
             </nav>
           </aside>
           <main style={{ display: 'grid', gridTemplateRows: 'auto 1fr', minWidth: 0 }}>

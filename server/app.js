@@ -82,6 +82,22 @@ async function ensureSchema() {
       UNIQUE (provider, provider_id)
     );
   `)
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS user_interests (
+      user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      interest text NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (user_id, interest)
+    );
+  `)
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS follows (
+      follower_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      followee_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (follower_id, followee_id)
+    );
+  `)
 }
 
 function getAuthUser(req) {
@@ -110,6 +126,15 @@ function requireAuth(req, res) {
 function normalizeTags(tags) {
   if (!Array.isArray(tags)) return []
   return tags
+    .map((t) => String(t).trim().toLowerCase())
+    .filter(Boolean)
+    .filter((t, i, arr) => arr.indexOf(t) === i)
+    .slice(0, 12)
+}
+
+function normalizeInterests(interests) {
+  if (!Array.isArray(interests)) return []
+  return interests
     .map((t) => String(t).trim().toLowerCase())
     .filter(Boolean)
     .filter((t, i, arr) => arr.indexOf(t) === i)
@@ -170,6 +195,98 @@ app.post('/api/auth/login', async (req, res) => {
   const user = { id: String(row.id), username: String(row.username) }
   const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '30d' })
   res.json({ token, user })
+})
+
+app.get('/api/me', async (req, res) => {
+  await ensureSchema()
+  const db = getPool()
+  if (!db) return res.status(500).json({ error: 'db_not_configured' })
+  const user = requireAuth(req, res)
+  if (!user) return
+
+  const interestsResult = await db.query(`SELECT interest FROM user_interests WHERE user_id = $1 ORDER BY interest ASC`, [user.id])
+  const followingResult = await db.query(
+    `
+      SELECT u.username
+      FROM follows f
+      JOIN users u ON u.id = f.followee_id
+      WHERE f.follower_id = $1
+      ORDER BY u.username ASC
+    `,
+    [user.id]
+  )
+  res.json({
+    user,
+    interests: interestsResult.rows.map((r) => r.interest),
+    following: followingResult.rows.map((r) => r.username)
+  })
+})
+
+app.get('/api/me/interests', async (req, res) => {
+  await ensureSchema()
+  const db = getPool()
+  if (!db) return res.status(500).json({ error: 'db_not_configured' })
+  const user = requireAuth(req, res)
+  if (!user) return
+  const interestsResult = await db.query(`SELECT interest FROM user_interests WHERE user_id = $1 ORDER BY interest ASC`, [user.id])
+  res.json({ interests: interestsResult.rows.map((r) => r.interest) })
+})
+
+app.put('/api/me/interests', async (req, res) => {
+  await ensureSchema()
+  const db = getPool()
+  if (!db) return res.status(500).json({ error: 'db_not_configured' })
+  const user = requireAuth(req, res)
+  if (!user) return
+
+  const interests = normalizeInterests(req.body?.interests)
+  await db.query(`DELETE FROM user_interests WHERE user_id = $1`, [user.id])
+  for (const interest of interests) {
+    await db.query(`INSERT INTO user_interests (user_id, interest) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [user.id, interest])
+  }
+  res.json({ interests })
+})
+
+app.get('/api/me/following', async (req, res) => {
+  await ensureSchema()
+  const db = getPool()
+  if (!db) return res.status(500).json({ error: 'db_not_configured' })
+  const user = requireAuth(req, res)
+  if (!user) return
+  const followingResult = await db.query(
+    `
+      SELECT u.username
+      FROM follows f
+      JOIN users u ON u.id = f.followee_id
+      WHERE f.follower_id = $1
+      ORDER BY u.username ASC
+    `,
+    [user.id]
+  )
+  res.json({ following: followingResult.rows.map((r) => r.username) })
+})
+
+app.post('/api/follow/:username/toggle', async (req, res) => {
+  await ensureSchema()
+  const db = getPool()
+  if (!db) return res.status(500).json({ error: 'db_not_configured' })
+  const user = requireAuth(req, res)
+  if (!user) return
+
+  const username = String(req.params.username || '').trim()
+  if (!username) return res.status(400).json({ error: 'invalid_username' })
+  const target = await db.query(`SELECT id, username FROM users WHERE username = $1 LIMIT 1`, [username])
+  if (!target.rowCount) return res.status(404).json({ error: 'not_found' })
+  const followeeId = String(target.rows[0].id)
+  if (followeeId === user.id) return res.status(400).json({ error: 'cannot_follow_self' })
+
+  const existing = await db.query(`SELECT 1 FROM follows WHERE follower_id = $1 AND followee_id = $2 LIMIT 1`, [user.id, followeeId])
+  if (existing.rowCount) {
+    await db.query(`DELETE FROM follows WHERE follower_id = $1 AND followee_id = $2`, [user.id, followeeId])
+    return res.json({ following: false })
+  }
+  await db.query(`INSERT INTO follows (follower_id, followee_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [user.id, followeeId])
+  return res.json({ following: true })
 })
 
 async function findOrCreateOAuthUser({ provider, providerId, username, email }) {

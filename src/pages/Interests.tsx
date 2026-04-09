@@ -14,6 +14,7 @@ function Interests() {
   const location = useLocation()
   const navigate = useNavigate()
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     const params = new URLSearchParams(location.search)
@@ -24,6 +25,18 @@ function Interests() {
     const rest = params.toString()
     navigate(rest ? `/intereses?${rest}` : '/intereses', { replace: true })
   }, [location.search, navigate])
+
+  useEffect(() => {
+    const token = localStorage.getItem('musart_token')
+    if (!token) return
+    fetch('/api/me/interests', { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d?.interests) return
+        setSelected(new Set((d.interests as string[]).map((x) => String(x))))
+      })
+      .catch(() => null)
+  }, [])
 
   const backgrounds = useMemo<Record<string, string>>(
     () => ({
@@ -73,17 +86,34 @@ function Interests() {
         ))}
       </div>
       <div style={{ marginTop: 22, display: 'flex', gap: 10 }}>
-        <Link
+        <button
           className="button"
-          to="/app"
+          type="button"
+          disabled={selectedCount === 0 || saving}
+          onClick={async () => {
+            const token = localStorage.getItem('musart_token')
+            const interests = Array.from(selected).map((x) => x.toLowerCase())
+            setSaving(true)
+            try {
+              if (token) {
+                await fetch('/api/me/interests', {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                  body: JSON.stringify({ interests })
+                })
+              }
+              navigate('/app')
+            } finally {
+              setSaving(false)
+            }
+          }}
           aria-disabled={selectedCount === 0}
           style={{
-            pointerEvents: selectedCount === 0 ? 'none' : 'auto',
             opacity: selectedCount === 0 ? 0.55 : 1
           }}
         >
           Continuar
-        </Link>
+        </button>
         <Link className="button secondary" to="/">Volver</Link>
       </div>
     </div>
