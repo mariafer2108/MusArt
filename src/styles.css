@@ -350,6 +350,9 @@ body {
 
 .post {
   overflow: hidden;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
 }
 .post-header {
   display: flex;
@@ -463,15 +466,12 @@ body {
 .post-image {
   border-radius: 16px;
   overflow: hidden;
-  background: #fff;
+  background: transparent;
 }
 .post-image img {
   width: 100%;
   height: auto;
-  max-height: 720px;
-  object-fit: initial;
   display: block;
-  margin: 0 auto;
 }
 .post-actions {
   margin-top: 10px;
