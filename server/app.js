@@ -197,6 +197,14 @@ app.post('/api/auth/login', async (req, res) => {
   res.json({ token, user })
 })
 
+app.get('/api/users', async (_req, res) => {
+  await ensureSchema()
+  const db = getPool()
+  if (!db) return res.status(500).json({ error: 'db_not_configured' })
+  const result = await db.query(`SELECT username FROM users ORDER BY created_at DESC LIMIT 50`)
+  res.json({ users: result.rows.map((r) => ({ username: r.username })) })
+})
+
 app.get('/api/me', async (req, res) => {
   await ensureSchema()
   const db = getPool()

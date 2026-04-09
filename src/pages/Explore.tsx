@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
 import type { AppOutletContext } from '../ui/AppLayout'
 
 function Explore() {
-  const { posts } = useOutletContext<AppOutletContext>()
+  const { posts, following, toggleFollow, meUsername } = useOutletContext<AppOutletContext>()
   const [query, setQuery] = useState('')
   const [activeTag, setActiveTag] = useState<string | null>(null)
+  const [users, setUsers] = useState<Array<{ username: string }>>([])
 
   const categories = useMemo(
     () => [
@@ -18,6 +19,13 @@ function Explore() {
     ],
     []
   )
+
+  useEffect(() => {
+    fetch('/api/users')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setUsers(Array.isArray(d?.users) ? d.users : []))
+      .catch(() => setUsers([]))
+  }, [])
 
   const allTags = useMemo(() => {
     const set = new Set<string>()
@@ -38,6 +46,13 @@ function Explore() {
     })
   }, [activeTag, posts, query])
 
+  const suggestedUsers = useMemo(() => {
+    return users
+      .map((u) => ({ username: String(u.username) }))
+      .filter((u) => u.username && u.username !== meUsername)
+      .slice(0, 12)
+  }, [meUsername, users])
+
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       <div className="card" style={{ padding: 14 }}>
@@ -48,6 +63,30 @@ function Explore() {
           onChange={(e) => setQuery(e.target.value)}
         />
       </div>
+
+      {suggestedUsers.length ? (
+        <div className="card" style={{ padding: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
+            <div style={{ fontWeight: 900 }}>Usuarios</div>
+            <div className="pill">{suggestedUsers.length}</div>
+          </div>
+          <div style={{ display: 'grid', gap: 10 }}>
+            {suggestedUsers.map((u) => (
+              <div key={u.username} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <div style={{ fontWeight: 900, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.username}</div>
+                <button
+                  type="button"
+                  className={following.has(u.username) ? 'button secondary' : 'button'}
+                  onClick={() => toggleFollow(u.username)}
+                  style={{ padding: '8px 12px', borderRadius: 999, fontSize: 12 }}
+                >
+                  {following.has(u.username) ? 'Siguiendo' : 'Seguir'}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
         {categories.map((c) => (
