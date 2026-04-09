@@ -205,6 +205,7 @@ async function findOrCreateOAuthUser({ provider, providerId, username, email }) 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || ''
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || ''
 const GOOGLE_ENABLED = Boolean(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET)
+const GOOGLE_PKCE = process.env.GOOGLE_PKCE ? process.env.GOOGLE_PKCE !== '0' : true
 function base64Url(buf) {
   return Buffer.from(buf)
     .toString('base64')
@@ -217,18 +218,20 @@ app.get('/api/oauth/google/start', async (req, res) => {
   if (!GOOGLE_ENABLED) return res.status(501).json({ error: 'google_oauth_not_configured' })
   const apiOrigin = getApiOrigin(req)
   const redirectUri = `${apiOrigin}/api/oauth/google/callback`
-  const codeVerifier = base64Url(crypto.randomBytes(32))
-  const codeChallenge = base64Url(crypto.createHash('sha256').update(codeVerifier).digest())
-  const state = jwt.sign({ p: 'google', cv: codeVerifier }, JWT_SECRET, { expiresIn: '10m' })
   const url = new URL('https://accounts.google.com/o/oauth2/v2/auth')
   url.searchParams.set('client_id', GOOGLE_CLIENT_ID)
   url.searchParams.set('redirect_uri', redirectUri)
   url.searchParams.set('response_type', 'code')
   url.searchParams.set('scope', 'openid email profile')
   url.searchParams.set('prompt', 'consent')
-  url.searchParams.set('code_challenge', codeChallenge)
-  url.searchParams.set('code_challenge_method', 'S256')
-  url.searchParams.set('state', state)
+  if (GOOGLE_PKCE) {
+    const codeVerifier = base64Url(crypto.randomBytes(32))
+    const codeChallenge = base64Url(crypto.createHash('sha256').update(codeVerifier).digest())
+    const state = jwt.sign({ p: 'google', cv: codeVerifier }, JWT_SECRET, { expiresIn: '10m' })
+    url.searchParams.set('code_challenge', codeChallenge)
+    url.searchParams.set('code_challenge_method', 'S256')
+    url.searchParams.set('state', state)
+  }
   res.redirect(url.toString())
 })
 
@@ -239,16 +242,20 @@ app.get('/api/oauth/google/callback', async (req, res) => {
     const redirectUri = `${apiOrigin}/api/oauth/google/callback`
     const code = String(req.query.code || '')
     const state = String(req.query.state || '')
-    const decoded = jwt.verify(state, JWT_SECRET)
-    if (!decoded || decoded.p !== 'google' || !decoded.cv) return res.status(400).send('invalid_state')
-    const codeVerifier = String(decoded.cv)
+    let codeVerifier = ''
+    if (state) {
+      try {
+        const decoded = jwt.verify(state, JWT_SECRET)
+        if (decoded && decoded.p === 'google' && decoded.cv) codeVerifier = String(decoded.cv)
+      } catch {}
+    }
     const body = new URLSearchParams()
     body.set('client_id', GOOGLE_CLIENT_ID)
     body.set('client_secret', GOOGLE_CLIENT_SECRET)
     body.set('grant_type', 'authorization_code')
     body.set('code', code)
     body.set('redirect_uri', redirectUri)
-    body.set('code_verifier', codeVerifier)
+    if (codeVerifier) body.set('code_verifier', codeVerifier)
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
