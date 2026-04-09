@@ -1,5 +1,5 @@
-import { Link } from 'react-router-dom'
-import { useMemo, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
 
 const categories = [
   'Ilustración Digital',
@@ -11,7 +11,19 @@ const categories = [
 ]
 
 function Interests() {
+  const location = useLocation()
+  const navigate = useNavigate()
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const token = params.get('token')
+    if (!token) return
+    localStorage.setItem('musart_token', token)
+    params.delete('token')
+    const rest = params.toString()
+    navigate(rest ? `/intereses?${rest}` : '/intereses', { replace: true })
+  }, [location.search, navigate])
 
   const backgrounds = useMemo<Record<string, string>>(
     () => ({
