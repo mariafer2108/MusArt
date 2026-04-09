@@ -489,6 +489,77 @@ app.post('/api/posts', async (req, res) => {
   })
 })
 
+app.patch('/api/posts/:id', async (req, res) => {
+  await ensureSchema()
+  const p = getPool()
+  if (!p) return res.status(500).json({ error: 'db_not_configured' })
+  const user = requireAuth(req, res)
+  if (!user) return
+
+  const postId = String(req.params.id)
+  const title = String(req.body?.title ?? '').trim()
+  const tags = normalizeTags(req.body?.tags)
+
+  if (title.length < 1 || title.length > 80) return res.status(400).json({ error: 'invalid_title' })
+
+  const owner = await p.query(`SELECT user_id FROM posts WHERE id = $1 LIMIT 1`, [postId])
+  if (!owner.rowCount) return res.status(404).json({ error: 'not_found' })
+  if (String(owner.rows[0].user_id) !== user.id) return res.status(403).json({ error: 'forbidden' })
+
+  await p.query(`UPDATE posts SET title = $2, tags = $3 WHERE id = $1`, [postId, title, JSON.stringify(tags)])
+
+  const postResult = await p.query(
+    `
+      SELECT
+        p.id,
+        p.title,
+        p.tags,
+        p.image_url,
+        p.shares_count,
+        p.created_at,
+        u.username as author,
+        (SELECT count(*)::int FROM likes l WHERE l.post_id = p.id) as likes_count,
+        (SELECT count(*)::int FROM comments c WHERE c.post_id = p.id) as comments_count,
+        EXISTS (SELECT 1 FROM likes l2 WHERE l2.post_id = p.id AND l2.user_id = $2::uuid) as liked_by_me
+      FROM posts p
+      JOIN users u ON u.id = p.user_id
+      WHERE p.id = $1
+      LIMIT 1
+    `,
+    [postId, user.id]
+  )
+  const row = postResult.rows[0]
+
+  const commentsResult = await p.query(
+    `
+      SELECT c.id, c.post_id, c.text, c.created_at, u.username as author
+      FROM comments c
+      JOIN users u ON u.id = c.user_id
+      WHERE c.post_id = $1
+      ORDER BY c.created_at DESC
+      LIMIT 5
+    `,
+    [postId]
+  )
+  const previewComments = commentsResult.rows.map((c) => ({ id: c.id, author: c.author, text: c.text, createdAt: c.created_at }))
+
+  res.json({
+    post: {
+      id: row.id,
+      author: row.author,
+      title: row.title,
+      tags: JSON.parse(row.tags || '[]'),
+      imageUrl: row.image_url,
+      likesCount: row.likes_count,
+      commentsCount: row.comments_count,
+      sharesCount: row.shares_count,
+      likedByMe: row.liked_by_me,
+      previewComments,
+      createdAt: row.created_at
+    }
+  })
+})
+
 app.post('/api/posts/:id/like', async (req, res) => {
   await ensureSchema()
   const p = getPool()

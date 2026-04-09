@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 
 export type Comment = {
@@ -30,14 +30,36 @@ export type AppOutletContext = {
   addComment: (postId: string, text: string) => void
   sharePost: (postId: string) => Promise<void>
   addPost: (input: { title: string; tags: string[]; imageUrl: string }) => Promise<void>
+  updatePost: (postId: string, input: { title: string; tags: string[] }) => Promise<void>
   token: string | null
   setToken: (token: string | null) => void
+  meUsername: string | null
+}
+
+function decodeJwtPayload(token: string): unknown {
+  const parts = token.split('.')
+  if (parts.length < 2) return null
+  const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4)
+  const json = atob(padded)
+  return JSON.parse(json)
 }
 
 function AppLayout() {
   const [posts, setPosts] = useState<Post[]>([])
   const [following, setFollowing] = useState<Set<string>>(() => new Set())
   const [token, setTokenState] = useState<string | null>(() => localStorage.getItem('musart_token'))
+
+  const meUsername = useMemo(() => {
+    if (!token) return null
+    try {
+      const payload = decodeJwtPayload(token) as { username?: unknown }
+      if (!payload?.username) return null
+      return String(payload.username)
+    } catch {
+      return null
+    }
+  }, [token])
 
   function setToken(next: string | null) {
     setTokenState(next)
@@ -116,6 +138,11 @@ function AppLayout() {
     setPosts((prev) => [r.post, ...prev])
   }
 
+  async function updatePost(postId: string, input: { title: string; tags: string[] }) {
+    const r = await api<{ post: Post }>(`/api/posts/${encodeURIComponent(postId)}`, { method: 'PATCH', body: JSON.stringify(input) })
+    setPosts((prev) => prev.map((p) => (p.id === postId ? r.post : p)))
+  }
+
   return (
     <div className="app-shell">
       <div className="app-frame">
@@ -158,8 +185,10 @@ function AppLayout() {
                     addComment,
                     sharePost,
                     addPost,
+                    updatePost,
                     token,
-                    setToken
+                    setToken,
+                    meUsername
                   } satisfies AppOutletContext
                 }
               />

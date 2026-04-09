@@ -28,22 +28,30 @@ function formatCount(n: number) {
 function PostCard({
   post,
   isFollowing,
+  canEdit,
   onToggleFollow,
   onToggleLike,
   onAddComment,
   onShare,
-  onTagClick
+  onTagClick,
+  onEdit
 }: {
   post: Post
   isFollowing: boolean
+  canEdit: boolean
   onToggleFollow: (author: string) => void
   onToggleLike: (postId: string) => void
   onAddComment: (postId: string, text: string) => void
   onShare: (postId: string) => void
   onTagClick: (tag: string) => void
+  onEdit: (postId: string, next: { title: string; tags: string[] }) => Promise<void>
 }) {
   const [commentsOpen, setCommentsOpen] = useState(false)
   const [draft, setDraft] = useState('')
+  const [editing, setEditing] = useState(false)
+  const [editTitle, setEditTitle] = useState(post.title)
+  const [editTags, setEditTags] = useState(post.tags.map((t) => `#${t}`).join(' '))
+  const [savingEdit, setSavingEdit] = useState(false)
 
   function submitComment() {
     const text = draft.trim()
@@ -51,6 +59,29 @@ function PostCard({
     onAddComment(post.id, text)
     setDraft('')
     setCommentsOpen(true)
+  }
+
+  function parseTags(text: string) {
+    const matches = Array.from(text.matchAll(/#([A-Za-z0-9_]+)/g)).map((m) => m[1].toLowerCase())
+    if (matches.length) return matches
+    return text
+      .split(/[,\s]+/g)
+      .map((t) => t.trim().toLowerCase())
+      .filter(Boolean)
+      .filter((t, i, arr) => arr.indexOf(t) === i)
+  }
+
+  async function saveEdit() {
+    const title = editTitle.trim()
+    if (!title) return
+    const tags = parseTags(editTags)
+    setSavingEdit(true)
+    try {
+      await onEdit(post.id, { title, tags })
+      setEditing(false)
+    } finally {
+      setSavingEdit(false)
+    }
   }
 
   return (
@@ -77,14 +108,29 @@ function PostCard({
             </div>
           </div>
         </div>
-        <button
-          type="button"
-          className={isFollowing ? 'button secondary' : 'button'}
-          onClick={() => onToggleFollow(post.author)}
-          style={{ padding: '8px 12px', borderRadius: 999, fontSize: 12 }}
-        >
-          {isFollowing ? 'Siguiendo' : 'Seguir'}
-        </button>
+        {canEdit ? (
+          <button
+            type="button"
+            className="button secondary"
+            onClick={() => {
+              setEditTitle(post.title)
+              setEditTags(post.tags.map((t) => `#${t}`).join(' '))
+              setEditing(true)
+            }}
+            style={{ padding: '8px 12px', borderRadius: 999, fontSize: 12 }}
+          >
+            Editar
+          </button>
+        ) : (
+          <button
+            type="button"
+            className={isFollowing ? 'button secondary' : 'button'}
+            onClick={() => onToggleFollow(post.author)}
+            style={{ padding: '8px 12px', borderRadius: 999, fontSize: 12 }}
+          >
+            {isFollowing ? 'Siguiendo' : 'Seguir'}
+          </button>
+        )}
       </div>
       <div className="post-image">
         <img src={post.imageUrl} alt="Publicación" loading="lazy" />
@@ -145,12 +191,37 @@ function PostCard({
           )}
         </div>
       ) : null}
+
+      {editing ? (
+        <div className="modal-overlay" role="dialog" aria-modal="true">
+          <div className="modal" style={{ maxWidth: 720 }}>
+            <div className="modal-header">
+              <div style={{ fontWeight: 900 }}>Editar publicación</div>
+              <button className="button secondary" type="button" onClick={() => setEditing(false)} style={{ padding: '8px 12px' }}>
+                Cerrar
+              </button>
+            </div>
+            <div style={{ padding: 14, display: 'grid', gap: 10 }}>
+              <input className="input" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} placeholder="Título" />
+              <input className="input" value={editTags} onChange={(e) => setEditTags(e.target.value)} placeholder="#tags (ej: #anime #digital)" />
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                <button className="button secondary" type="button" onClick={() => setEditing(false)} disabled={savingEdit}>
+                  Cancelar
+                </button>
+                <button className="button" type="button" onClick={saveEdit} disabled={savingEdit || !editTitle.trim()}>
+                  Guardar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
 
 function Feed() {
-  const { posts, following, toggleFollow, toggleLike, addComment, sharePost } = useOutletContext<AppOutletContext>()
+  const { posts, following, toggleFollow, toggleLike, addComment, sharePost, updatePost, meUsername } = useOutletContext<AppOutletContext>()
   const [activeTag, setActiveTag] = useState<string | null>(null)
   const filteredPosts = activeTag ? posts.filter((p) => p.tags.includes(activeTag)) : posts
 
@@ -172,11 +243,13 @@ function Feed() {
           key={p.id}
           post={p}
           isFollowing={following.has(p.author)}
+          canEdit={Boolean(meUsername && p.author === meUsername)}
           onToggleFollow={toggleFollow}
           onToggleLike={toggleLike}
           onAddComment={addComment}
           onShare={sharePost}
           onTagClick={(t) => setActiveTag(t)}
+          onEdit={(postId, next) => updatePost(postId, next)}
         />
       ))}
     </div>
