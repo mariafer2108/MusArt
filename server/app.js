@@ -1,37 +1,53 @@
 import 'dotenv/config'
+import crypto from 'crypto'
 import express from 'express'
 import cors from 'cors'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 import pkg from 'pg'
-import { generators, Issuer } from 'openid-client'
 
 const { Pool } = pkg
 
-const DATABASE_URL = process.env.POSTGRES_URL || process.env.DATABASE_URL
+const DATABASE_URL =
+  process.env.POSTGRES_URL ||
+  process.env.POSTGRES_URL_NON_POOLING ||
+  process.env.POSTGRES_URL_UNPOOLED ||
+  process.env.DATABASE_URL ||
+  process.env.DATABASE_URL_UNPOOLED ||
+  ''
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret'
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://127.0.0.1:5176'
 
-if (!DATABASE_URL) {
-  throw new Error('Missing POSTGRES_URL or DATABASE_URL')
+let pool = null
+
+function getPool() {
+  if (!DATABASE_URL) return null
+  if (!pool) pool = new Pool({ connectionString: DATABASE_URL })
+  return pool
 }
 
-const pool = new Pool({ connectionString: DATABASE_URL })
+function getApiOrigin(req) {
+  const proto = String(req.headers['x-forwarded-proto'] || 'http')
+  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '127.0.0.1')
+  return `${proto}://${host}`
+}
 
 async function ensureSchema() {
-  await pool.query(`CREATE EXTENSION IF NOT EXISTS pgcrypto;`)
-  await pool.query(`
+  const p = getPool()
+  if (!p) throw new Error('db_not_configured')
+
+  await p.query(`
     CREATE TABLE IF NOT EXISTS users (
-      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      id uuid PRIMARY KEY,
       username text UNIQUE NOT NULL,
       email text UNIQUE NOT NULL,
       password_hash text NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now()
     );
   `)
-  await pool.query(`
+  await p.query(`
     CREATE TABLE IF NOT EXISTS posts (
-      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      id uuid PRIMARY KEY,
       user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       title text NOT NULL,
       tags text NOT NULL DEFAULT '[]',
@@ -40,7 +56,7 @@ async function ensureSchema() {
       created_at timestamptz NOT NULL DEFAULT now()
     );
   `)
-  await pool.query(`
+  await p.query(`
     CREATE TABLE IF NOT EXISTS likes (
       post_id uuid NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
       user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -48,16 +64,16 @@ async function ensureSchema() {
       PRIMARY KEY (post_id, user_id)
     );
   `)
-  await pool.query(`
+  await p.query(`
     CREATE TABLE IF NOT EXISTS comments (
-      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      id uuid PRIMARY KEY,
       post_id uuid NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
       user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       text text NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now()
     );
   `)
-  await pool.query(`
+  await p.query(`
     CREATE TABLE IF NOT EXISTS oauth_accounts (
       provider text NOT NULL,
       provider_id text NOT NULL,
@@ -103,22 +119,30 @@ function normalizeTags(tags) {
 const app = express()
 app.use(cors({ origin: true, credentials: true }))
 app.use(express.json({ limit: '12mb' }))
+app.use((req, _res, next) => {
+  if (req.url.startsWith('/api/')) return next()
+  req.url = `/api${req.url}`
+  return next()
+})
 
 app.get('/api/health', async (_req, res) => {
-  res.json({ ok: true })
+  res.json({ ok: true, dbConfigured: Boolean(DATABASE_URL) })
 })
 
 app.post('/api/auth/register', async (req, res) => {
   await ensureSchema()
+  const db = getPool()
+  if (!db) return res.status(500).json({ error: 'db_not_configured' })
   const u = String(req.body?.username ?? '').trim()
   const e = String(req.body?.email ?? '').trim().toLowerCase()
-  const p = String(req.body?.password ?? '')
-  if (u.length < 3 || e.length < 5 || p.length < 6) return res.status(400).json({ error: 'invalid_input' })
-  const passwordHash = await bcrypt.hash(p, 10)
+  const password = String(req.body?.password ?? '')
+  if (u.length < 3 || e.length < 5 || password.length < 6) return res.status(400).json({ error: 'invalid_input' })
+  const passwordHash = await bcrypt.hash(password, 10)
+  const id = crypto.randomUUID()
   try {
-    const created = await pool.query(
-      `INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id, username`,
-      [u, e, passwordHash]
+    const created = await db.query(
+      `INSERT INTO users (id, username, email, password_hash) VALUES ($1, $2, $3, $4) RETURNING id, username`,
+      [id, u, e, passwordHash]
     )
     const user = created.rows[0]
     const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '30d' })
@@ -130,16 +154,18 @@ app.post('/api/auth/register', async (req, res) => {
 
 app.post('/api/auth/login', async (req, res) => {
   await ensureSchema()
+  const db = getPool()
+  if (!db) return res.status(500).json({ error: 'db_not_configured' })
   const login = String(req.body?.emailOrUsername ?? '').trim()
-  const p = String(req.body?.password ?? '')
-  if (login.length < 3 || p.length < 6) return res.status(400).json({ error: 'invalid_input' })
+  const password = String(req.body?.password ?? '')
+  if (login.length < 3 || password.length < 6) return res.status(400).json({ error: 'invalid_input' })
   const isEmail = login.includes('@')
   const q = isEmail ? `SELECT id, username, password_hash FROM users WHERE email = $1 LIMIT 1` : `SELECT id, username, password_hash FROM users WHERE username = $1 LIMIT 1`
   const value = isEmail ? login.toLowerCase() : login
-  const result = await pool.query(q, [value])
+  const result = await db.query(q, [value])
   const row = result.rows[0]
   if (!row) return res.status(401).json({ error: 'invalid_credentials' })
-  const ok = await bcrypt.compare(p, String(row.password_hash))
+  const ok = await bcrypt.compare(password, String(row.password_hash))
   if (!ok) return res.status(401).json({ error: 'invalid_credentials' })
   const user = { id: String(row.id), username: String(row.username) }
   const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '30d' })
@@ -148,25 +174,28 @@ app.post('/api/auth/login', async (req, res) => {
 
 async function findOrCreateOAuthUser({ provider, providerId, username, email }) {
   await ensureSchema()
-  let r = await pool.query(`SELECT u.id, u.username FROM oauth_accounts oa JOIN users u ON u.id = oa.user_id WHERE oa.provider = $1 AND oa.provider_id = $2 LIMIT 1`, [provider, providerId])
+  const db = getPool()
+  if (!db) throw new Error('db_not_configured')
+  let r = await db.query(`SELECT u.id, u.username FROM oauth_accounts oa JOIN users u ON u.id = oa.user_id WHERE oa.provider = $1 AND oa.provider_id = $2 LIMIT 1`, [provider, providerId])
   if (r.rowCount) return r.rows[0]
   let uname = (username || (email ? email.split('@')[0] : provider + '_' + providerId)).toLowerCase().replace(/[^a-z0-9_]/g, '')
   if (uname.length < 3) uname = `${provider}${Math.floor(Math.random() * 10000)}`
   let suffix = 0
   while (true) {
-    const exists = await pool.query(`SELECT 1 FROM users WHERE username = $1 LIMIT 1`, [uname])
+    const exists = await db.query(`SELECT 1 FROM users WHERE username = $1 LIMIT 1`, [uname])
     if (!exists.rowCount) break
     suffix += 1
     uname = `${uname}${suffix}`
   }
   const randomPass = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)
   const passwordHash = await bcrypt.hash(randomPass, 10)
-  const created = await pool.query(
-    `INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id, username`,
-    [uname, email || `${provider}-${providerId}@example.invalid`, passwordHash]
+  const id = crypto.randomUUID()
+  const created = await db.query(
+    `INSERT INTO users (id, username, email, password_hash) VALUES ($1, $2, $3, $4) RETURNING id, username`,
+    [id, uname, email || `${provider}-${providerId}@example.invalid`, passwordHash]
   )
   const user = created.rows[0]
-  await pool.query(
+  await db.query(
     `INSERT INTO oauth_accounts (provider, provider_id, user_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
     [provider, providerId, user.id]
   )
@@ -176,26 +205,31 @@ async function findOrCreateOAuthUser({ provider, providerId, username, email }) 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || ''
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || ''
 const GOOGLE_ENABLED = Boolean(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET)
-let googleClientPromise = null
+let googleIssuerPromise = null
 
-async function getGoogleClient() {
-  if (!GOOGLE_ENABLED) throw new Error('google_oauth_not_configured')
-  if (!googleClientPromise) {
-    const issuer = await Issuer.discover('https://accounts.google.com')
-    const redirectUri = `http://127.0.0.1:${process.env.API_PORT || process.env.PORT || 5178}/api/oauth/google/callback`
-    googleClientPromise = new issuer.Client({
-      client_id: GOOGLE_CLIENT_ID,
-      client_secret: GOOGLE_CLIENT_SECRET,
-      redirect_uris: [redirectUri],
-      response_types: ['code']
-    })
+async function getGoogleIssuer() {
+  if (!googleIssuerPromise) {
+    googleIssuerPromise = import('openid-client').then(({ Issuer }) => Issuer.discover('https://accounts.google.com'))
   }
-  return googleClientPromise
+  return googleIssuerPromise
 }
 
-app.get('/api/oauth/google/start', async (_req, res) => {
+async function getGoogleClient(apiOrigin) {
+  if (!GOOGLE_ENABLED) throw new Error('google_oauth_not_configured')
+  const issuer = await getGoogleIssuer()
+  const redirectUri = `${apiOrigin}/api/oauth/google/callback`
+  return new issuer.Client({
+    client_id: GOOGLE_CLIENT_ID,
+    client_secret: GOOGLE_CLIENT_SECRET,
+    redirect_uris: [redirectUri],
+    response_types: ['code']
+  })
+}
+
+app.get('/api/oauth/google/start', async (req, res) => {
   if (!GOOGLE_ENABLED) return res.status(501).json({ error: 'google_oauth_not_configured' })
-  const client = await getGoogleClient()
+  const apiOrigin = getApiOrigin(req)
+  const client = await getGoogleClient(apiOrigin)
   const url = client.authorizationUrl({
     scope: 'openid email profile',
     prompt: 'consent'
@@ -206,9 +240,10 @@ app.get('/api/oauth/google/start', async (_req, res) => {
 app.get('/api/oauth/google/callback', async (req, res) => {
   if (!GOOGLE_ENABLED) return res.status(501).json({ error: 'google_oauth_not_configured' })
   try {
-    const client = await getGoogleClient()
+    const apiOrigin = getApiOrigin(req)
+    const client = await getGoogleClient(apiOrigin)
     const params = client.callbackParams(req)
-    const redirectUri = `http://127.0.0.1:${process.env.API_PORT || process.env.PORT || 5178}/api/oauth/google/callback`
+    const redirectUri = `${apiOrigin}/api/oauth/google/callback`
     const tokenSet = await client.callback(redirectUri, params, {})
     const claims = tokenSet.claims()
     const providerId = String(claims.sub)
@@ -279,26 +314,31 @@ app.get('/api/oauth/instagram/callback', async (req, res) => {
 const APPLE_CLIENT_ID = process.env.APPLE_CLIENT_ID || ''
 const APPLE_CLIENT_SECRET = process.env.APPLE_CLIENT_SECRET || ''
 const APPLE_ENABLED = Boolean(APPLE_CLIENT_ID && APPLE_CLIENT_SECRET)
-let appleClientPromise = null
+let appleIssuerPromise = null
 
-async function getAppleClient() {
-  if (!APPLE_ENABLED) throw new Error('apple_oauth_not_configured')
-  if (!appleClientPromise) {
-    const issuer = await Issuer.discover('https://appleid.apple.com')
-    const redirectUri = `http://127.0.0.1:${process.env.API_PORT || process.env.PORT || 5178}/api/oauth/apple/callback`
-    appleClientPromise = new issuer.Client({
-      client_id: APPLE_CLIENT_ID,
-      client_secret: APPLE_CLIENT_SECRET,
-      redirect_uris: [redirectUri],
-      response_types: ['code']
-    })
+async function getAppleIssuer() {
+  if (!appleIssuerPromise) {
+    appleIssuerPromise = import('openid-client').then(({ Issuer }) => Issuer.discover('https://appleid.apple.com'))
   }
-  return appleClientPromise
+  return appleIssuerPromise
 }
 
-app.get('/api/oauth/apple/start', async (_req, res) => {
+async function getAppleClient(apiOrigin) {
+  if (!APPLE_ENABLED) throw new Error('apple_oauth_not_configured')
+  const issuer = await getAppleIssuer()
+  const redirectUri = `${apiOrigin}/api/oauth/apple/callback`
+  return new issuer.Client({
+    client_id: APPLE_CLIENT_ID,
+    client_secret: APPLE_CLIENT_SECRET,
+    redirect_uris: [redirectUri],
+    response_types: ['code']
+  })
+}
+
+app.get('/api/oauth/apple/start', async (req, res) => {
   if (!APPLE_ENABLED) return res.status(501).json({ error: 'apple_oauth_not_configured' })
-  const client = await getAppleClient()
+  const apiOrigin = getApiOrigin(req)
+  const client = await getAppleClient(apiOrigin)
   const url = client.authorizationUrl({ scope: 'name email' })
   res.redirect(url)
 })
@@ -306,9 +346,10 @@ app.get('/api/oauth/apple/start', async (_req, res) => {
 app.get('/api/oauth/apple/callback', async (req, res) => {
   if (!APPLE_ENABLED) return res.status(501).json({ error: 'apple_oauth_not_configured' })
   try {
-    const client = await getAppleClient()
+    const apiOrigin = getApiOrigin(req)
+    const client = await getAppleClient(apiOrigin)
     const params = client.callbackParams(req)
-    const redirectUri = `http://127.0.0.1:${process.env.API_PORT || process.env.PORT || 5178}/api/oauth/apple/callback`
+    const redirectUri = `${apiOrigin}/api/oauth/apple/callback`
     const tokenSet = await client.callback(redirectUri, params, {})
     const claims = tokenSet.claims()
     const providerId = String(claims.sub)
@@ -329,9 +370,11 @@ app.get('/api/oauth/apple/callback', async (req, res) => {
 
 app.get('/api/posts', async (req, res) => {
   await ensureSchema()
+  const p = getPool()
+  if (!p) return res.status(500).json({ error: 'db_not_configured' })
   const auth = getAuthUser(req)
   const userId = auth?.id ?? null
-  const postsResult = await pool.query(
+  const postsResult = await p.query(
     `
       SELECT
         p.id,
@@ -356,7 +399,7 @@ app.get('/api/posts', async (req, res) => {
   const postIds = postsResult.rows.map((r) => r.id)
   const commentsByPost = new Map()
   if (postIds.length) {
-    const commentsResult = await pool.query(
+    const commentsResult = await p.query(
       `
         SELECT c.id, c.post_id, c.text, c.created_at, u.username as author
         FROM comments c
@@ -390,6 +433,8 @@ app.get('/api/posts', async (req, res) => {
 
 app.post('/api/posts', async (req, res) => {
   await ensureSchema()
+  const p = getPool()
+  if (!p) return res.status(500).json({ error: 'db_not_configured' })
   const user = requireAuth(req, res)
   if (!user) return
   const title = String(req.body?.title ?? '').trim()
@@ -397,9 +442,10 @@ app.post('/api/posts', async (req, res) => {
   const imageUrl = String(req.body?.imageUrl ?? '')
   if (title.length < 1 || title.length > 80) return res.status(400).json({ error: 'invalid_title' })
   if (!imageUrl) return res.status(400).json({ error: 'missing_image' })
-  const inserted = await pool.query(
-    `INSERT INTO posts (user_id, title, tags, image_url) VALUES ($1, $2, $3, $4) RETURNING id, created_at`,
-    [user.id, title, JSON.stringify(tags), imageUrl]
+  const id = crypto.randomUUID()
+  const inserted = await p.query(
+    `INSERT INTO posts (id, user_id, title, tags, image_url) VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at`,
+    [id, user.id, title, JSON.stringify(tags), imageUrl]
   )
   const row = inserted.rows[0]
   res.json({
@@ -421,16 +467,18 @@ app.post('/api/posts', async (req, res) => {
 
 app.post('/api/posts/:id/like', async (req, res) => {
   await ensureSchema()
+  const p = getPool()
+  if (!p) return res.status(500).json({ error: 'db_not_configured' })
   const user = requireAuth(req, res)
   if (!user) return
   const postId = String(req.params.id)
-  const existing = await pool.query(`SELECT 1 FROM likes WHERE post_id = $1 AND user_id = $2 LIMIT 1`, [postId, user.id])
+  const existing = await p.query(`SELECT 1 FROM likes WHERE post_id = $1 AND user_id = $2 LIMIT 1`, [postId, user.id])
   if (existing.rowCount) {
-    await pool.query(`DELETE FROM likes WHERE post_id = $1 AND user_id = $2`, [postId, user.id])
+    await p.query(`DELETE FROM likes WHERE post_id = $1 AND user_id = $2`, [postId, user.id])
   } else {
-    await pool.query(`INSERT INTO likes (post_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [postId, user.id])
+    await p.query(`INSERT INTO likes (post_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [postId, user.id])
   }
-  const likesCountResult = await pool.query(`SELECT count(*)::int as c FROM likes WHERE post_id = $1`, [postId])
+  const likesCountResult = await p.query(`SELECT count(*)::int as c FROM likes WHERE post_id = $1`, [postId])
   const likesCount = likesCountResult.rows[0]?.c ?? 0
   const likedByMe = !existing.rowCount
   res.json({ likesCount, likedByMe })
@@ -438,25 +486,30 @@ app.post('/api/posts/:id/like', async (req, res) => {
 
 app.post('/api/posts/:id/comments', async (req, res) => {
   await ensureSchema()
+  const p = getPool()
+  if (!p) return res.status(500).json({ error: 'db_not_configured' })
   const user = requireAuth(req, res)
   if (!user) return
   const postId = String(req.params.id)
   const text = String(req.body?.text ?? '').trim()
   if (text.length < 1 || text.length > 500) return res.status(400).json({ error: 'invalid_comment' })
-  const created = await pool.query(
-    `INSERT INTO comments (post_id, user_id, text) VALUES ($1, $2, $3) RETURNING id, created_at`,
-    [postId, user.id, text]
+  const id = crypto.randomUUID()
+  const created = await p.query(
+    `INSERT INTO comments (id, post_id, user_id, text) VALUES ($1, $2, $3, $4) RETURNING id, created_at`,
+    [id, postId, user.id, text]
   )
   const row = created.rows[0]
-  const commentsCountResult = await pool.query(`SELECT count(*)::int as c FROM comments WHERE post_id = $1`, [postId])
+  const commentsCountResult = await p.query(`SELECT count(*)::int as c FROM comments WHERE post_id = $1`, [postId])
   const commentsCount = commentsCountResult.rows[0]?.c ?? 0
   res.json({ comment: { id: row.id, author: user.username, text, createdAt: row.created_at }, commentsCount })
 })
 
 app.post('/api/posts/:id/share', async (req, res) => {
   await ensureSchema()
+  const p = getPool()
+  if (!p) return res.status(500).json({ error: 'db_not_configured' })
   const postId = String(req.params.id)
-  const updated = await pool.query(
+  const updated = await p.query(
     `UPDATE posts SET shares_count = shares_count + 1 WHERE id = $1 RETURNING shares_count`,
     [postId]
   )
