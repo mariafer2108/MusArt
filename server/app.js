@@ -158,7 +158,7 @@ app.use((req, _res, next) => {
 })
 
 app.get('/api/health', async (_req, res) => {
-  res.json({ ok: true, dbConfigured: Boolean(DATABASE_URL) })
+  res.json({ ok: true, dbConfigured: Boolean(DATABASE_URL), blobConfigured: Boolean(process.env.BLOB_READ_WRITE_TOKEN) })
 })
 
 app.post('/api/blob/upload', async (req, res) => {

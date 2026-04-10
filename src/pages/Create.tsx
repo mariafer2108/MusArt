@@ -52,8 +52,8 @@ function Create() {
       const mediaType = file.type.startsWith('video/') ? 'video' : 'image'
       await addPost({ title, tags, mediaUrl: blob.url, mediaType })
       navigate('/app')
-    } catch {
-      setError('No se pudo publicar. Intenta de nuevo.')
+    } catch (e: any) {
+      setError(e?.message ?? 'No se pudo publicar. Intenta de nuevo.')
     } finally {
       setSaving(false)
     }
