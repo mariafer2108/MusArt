@@ -405,7 +405,11 @@ app.get('/api/oauth/google/callback', async (req, res) => {
     })
     const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '30d' })
     const frontendOrigin = process.env.FRONTEND_ORIGIN || apiOrigin
-    res.redirect(`${frontendOrigin}/intereses?token=${encodeURIComponent(token)}`)
+    const db = getPool()
+    const hasInterestsResult = db ? await db.query(`SELECT 1 FROM user_interests WHERE user_id = $1 LIMIT 1`, [user.id]) : { rowCount: 0 }
+    const hasInterests = Boolean(hasInterestsResult.rowCount)
+    const nextPath = hasInterests ? '/app' : '/intereses'
+    res.redirect(`${frontendOrigin}${nextPath}?token=${encodeURIComponent(token)}`)
   } catch {
     res.status(500).send('oauth_failed')
   }
@@ -429,6 +433,7 @@ app.get('/api/oauth/instagram/start', (req, res) => {
 app.get('/api/oauth/instagram/callback', async (req, res) => {
   if (!IG_ENABLED) return res.status(501).json({ error: 'instagram_oauth_not_configured' })
   try {
+    const apiOrigin = getApiOrigin(req)
     const code = String(req.query.code || '')
     const params = new URLSearchParams()
     params.set('client_id', IG_CLIENT_ID)
@@ -454,7 +459,12 @@ app.get('/api/oauth/instagram/callback', async (req, res) => {
       email: ''
     })
     const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '30d' })
-    res.redirect(`${FRONTEND_ORIGIN}/intereses?token=${encodeURIComponent(token)}`)
+    const frontendOrigin = process.env.FRONTEND_ORIGIN || apiOrigin
+    const db = getPool()
+    const hasInterestsResult = db ? await db.query(`SELECT 1 FROM user_interests WHERE user_id = $1 LIMIT 1`, [user.id]) : { rowCount: 0 }
+    const hasInterests = Boolean(hasInterestsResult.rowCount)
+    const nextPath = hasInterests ? '/app' : '/intereses'
+    res.redirect(`${frontendOrigin}${nextPath}?token=${encodeURIComponent(token)}`)
   } catch {
     res.status(500).send('oauth_failed')
   }
@@ -511,7 +521,12 @@ app.get('/api/oauth/apple/callback', async (req, res) => {
       email
     })
     const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '30d' })
-    res.redirect(`${FRONTEND_ORIGIN}/intereses?token=${encodeURIComponent(token)}`)
+    const frontendOrigin = process.env.FRONTEND_ORIGIN || apiOrigin
+    const db = getPool()
+    const hasInterestsResult = db ? await db.query(`SELECT 1 FROM user_interests WHERE user_id = $1 LIMIT 1`, [user.id]) : { rowCount: 0 }
+    const hasInterests = Boolean(hasInterestsResult.rowCount)
+    const nextPath = hasInterests ? '/app' : '/intereses'
+    res.redirect(`${frontendOrigin}${nextPath}?token=${encodeURIComponent(token)}`)
   } catch {
     res.status(500).send('oauth_failed')
   }

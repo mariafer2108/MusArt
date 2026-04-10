@@ -19,9 +19,13 @@ function Login() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error ?? 'login_failed')
-      localStorage.setItem('musart_token', data.token)
+      const token = String(data.token || '')
+      localStorage.setItem('musart_token', token)
       localStorage.setItem('musart_username', data.user?.username ?? '')
-      navigate('/intereses')
+      const interestsRes = await fetch('/api/me/interests', { headers: { Authorization: `Bearer ${token}` } })
+      const interestsData = await interestsRes.json().catch(() => null)
+      const hasInterests = interestsRes.ok && Array.isArray(interestsData?.interests) && interestsData.interests.length > 0
+      navigate(hasInterests ? '/app' : '/intereses')
     } catch {
       setError('Correo/usuario o contraseña incorrectos')
     } finally {

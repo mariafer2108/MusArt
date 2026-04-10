@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 
 export type Comment = {
   id: string
@@ -47,6 +47,7 @@ function decodeJwtPayload(token: string): unknown {
 
 function AppLayout() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [posts, setPosts] = useState<Post[]>([])
   const [following, setFollowing] = useState<Set<string>>(() => new Set())
   const [token, setTokenState] = useState<string | null>(() => localStorage.getItem('musart_token'))
@@ -67,6 +68,16 @@ function AppLayout() {
     if (next) localStorage.setItem('musart_token', next)
     else localStorage.removeItem('musart_token')
   }
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const incoming = params.get('token')
+    if (!incoming) return
+    setToken(incoming)
+    params.delete('token')
+    const rest = params.toString()
+    navigate(rest ? `/app?${rest}` : '/app', { replace: true })
+  }, [location.search, navigate])
 
   async function api<T>(path: string, init?: RequestInit): Promise<T> {
     const headers = new Headers(init?.headers)

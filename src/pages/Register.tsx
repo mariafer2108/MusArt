@@ -20,7 +20,8 @@ function Register() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error ?? 'register_failed')
-      localStorage.setItem('musart_token', data.token)
+      const token = String(data.token || '')
+      localStorage.setItem('musart_token', token)
       localStorage.setItem('musart_username', data.user?.username ?? '')
       navigate('/intereses')
     } catch {
