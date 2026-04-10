@@ -162,6 +162,8 @@ app.get('/api/health', async (_req, res) => {
 })
 
 app.post('/api/blob/upload', async (req, res) => {
+  const authHeader = req.header('authorization') || (req.query?.auth ? `Bearer ${String(req.query.auth)}` : '')
+  if (authHeader && !req.header('authorization')) req.headers['authorization'] = authHeader
   const user = requireAuth(req, res)
   if (!user) return
 
