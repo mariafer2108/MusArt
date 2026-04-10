@@ -5,6 +5,7 @@ import cors from 'cors'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 import pkg from 'pg'
+import { handleUpload } from '@vercel/blob'
 
 const { Pool } = pkg
 
@@ -52,10 +53,16 @@ async function ensureSchema() {
       title text NOT NULL,
       tags text NOT NULL DEFAULT '[]',
       image_url text NOT NULL,
+      media_url text,
+      media_type text,
       shares_count int NOT NULL DEFAULT 0,
       created_at timestamptz NOT NULL DEFAULT now()
     );
   `)
+  await p.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_url text;`)
+  await p.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_type text;`)
+  await p.query(`UPDATE posts SET media_url = image_url WHERE media_url IS NULL;`)
+  await p.query(`UPDATE posts SET media_type = 'image' WHERE media_type IS NULL;`)
   await p.query(`
     CREATE TABLE IF NOT EXISTS likes (
       post_id uuid NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
@@ -152,6 +159,28 @@ app.use((req, _res, next) => {
 
 app.get('/api/health', async (_req, res) => {
   res.json({ ok: true, dbConfigured: Boolean(DATABASE_URL) })
+})
+
+app.post('/api/blob/upload', async (req, res) => {
+  const user = requireAuth(req, res)
+  if (!user) return
+
+  const response = await handleUpload({
+    request: req,
+    body: req.body,
+    onBeforeGenerateToken: async (_pathname) => {
+      return {
+        addRandomSuffix: true,
+        allowedContentTypes: ['image/*', 'video/*'],
+        maximumSizeInBytes: 300 * 1024 * 1024
+      }
+    },
+    onUploadCompleted: async () => {}
+  })
+
+  res.status(response.status)
+  response.headers.forEach((value, key) => res.setHeader(key, value))
+  res.send(await response.text())
 })
 
 app.post('/api/auth/register', async (req, res) => {
@@ -544,7 +573,8 @@ app.get('/api/posts', async (req, res) => {
         p.id,
         p.title,
         p.tags,
-        p.image_url,
+        COALESCE(p.media_url, p.image_url) as media_url,
+        COALESCE(p.media_type, 'image') as media_type,
         p.shares_count,
         p.created_at,
         u.username as author,
@@ -584,7 +614,8 @@ app.get('/api/posts', async (req, res) => {
     author: r.author,
     title: r.title,
     tags: JSON.parse(r.tags || '[]'),
-    imageUrl: r.image_url,
+    mediaUrl: r.media_url,
+    mediaType: r.media_type,
     likesCount: r.likes_count,
     commentsCount: r.comments_count,
     sharesCount: r.shares_count,
@@ -603,13 +634,15 @@ app.post('/api/posts', async (req, res) => {
   if (!user) return
   const title = String(req.body?.title ?? '').trim()
   const tags = normalizeTags(req.body?.tags)
-  const imageUrl = String(req.body?.imageUrl ?? '')
+  const mediaUrl = String(req.body?.mediaUrl ?? req.body?.imageUrl ?? '')
+  const mediaType = String(req.body?.mediaType ?? (String(req.body?.imageUrl ?? '').startsWith('data:video') ? 'video' : 'image')).toLowerCase()
   if (title.length < 1 || title.length > 80) return res.status(400).json({ error: 'invalid_title' })
-  if (!imageUrl) return res.status(400).json({ error: 'missing_image' })
+  if (!mediaUrl) return res.status(400).json({ error: 'missing_media' })
+  if (mediaType !== 'image' && mediaType !== 'video') return res.status(400).json({ error: 'invalid_media_type' })
   const id = crypto.randomUUID()
   const inserted = await p.query(
-    `INSERT INTO posts (id, user_id, title, tags, image_url) VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at`,
-    [id, user.id, title, JSON.stringify(tags), imageUrl]
+    `INSERT INTO posts (id, user_id, title, tags, image_url, media_url, media_type) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, created_at`,
+    [id, user.id, title, JSON.stringify(tags), mediaUrl, mediaUrl, mediaType]
   )
   const row = inserted.rows[0]
   res.json({
@@ -618,7 +651,8 @@ app.post('/api/posts', async (req, res) => {
       author: user.username,
       title,
       tags,
-      imageUrl,
+      mediaUrl,
+      mediaType,
       likesCount: 0,
       commentsCount: 0,
       sharesCount: 0,
@@ -689,7 +723,8 @@ app.patch('/api/posts/:id', async (req, res) => {
       author: row.author,
       title: row.title,
       tags: JSON.parse(row.tags || '[]'),
-      imageUrl: row.image_url,
+      mediaUrl: row.media_url,
+      mediaType: row.media_type,
       likesCount: row.likes_count,
       commentsCount: row.comments_count,
       sharesCount: row.shares_count,

@@ -133,7 +133,11 @@ function PostCard({
         )}
       </div>
       <div className="post-image">
-        <img src={post.imageUrl} alt="Publicación" loading="lazy" />
+        {post.mediaType === 'video' ? (
+          <video src={post.mediaUrl} controls playsInline preload="metadata" />
+        ) : (
+          <img src={post.mediaUrl} alt="Publicación" loading="lazy" />
+        )}
       </div>
       <div className="post-actions">
         <button

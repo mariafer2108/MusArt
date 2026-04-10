@@ -90,7 +90,11 @@ function Profile() {
                 className="portfolio-item"
                 onClick={() => setOpenPostId(p.id)}
               >
-                <img src={p.imageUrl} alt="Portafolio" loading="lazy" />
+                {p.mediaType === 'video' ? (
+                  <video src={p.mediaUrl} controls preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                ) : (
+                  <img src={p.mediaUrl} alt="Portafolio" loading="lazy" />
+                )}
               </button>
             ))
           ) : (
@@ -161,7 +165,11 @@ function Profile() {
 
             <div className="modal-body">
               <div className="modal-image">
-                <img src={openPost.imageUrl} alt="Publicación" />
+                {openPost.mediaType === 'video' ? (
+                  <video src={openPost.mediaUrl} controls playsInline style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
+                ) : (
+                  <img src={openPost.mediaUrl} alt="Publicación" />
+                )}
               </div>
               <div style={{ padding: 14, display: 'grid', gap: 12 }}>
                 <div style={{ fontWeight: 900, fontSize: 18, color: 'var(--primary-strong)' }}>{openPost.title}</div>

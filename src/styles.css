@@ -473,6 +473,11 @@ body {
   height: auto;
   display: block;
 }
+.post-image video {
+  width: 100%;
+  height: auto;
+  display: block;
+}
 .post-actions {
   margin-top: 10px;
   display: flex;

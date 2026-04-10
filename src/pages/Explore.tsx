@@ -132,12 +132,16 @@ function Explore() {
         {results.map((p) => (
           <div key={p.id} className="card" style={{ padding: 14 }}>
             <div style={{ height: 180, borderRadius: 16, overflow: 'hidden', background: '#ddd' }}>
-              <img
-                src={p.imageUrl}
-                alt="Publicación"
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                loading="lazy"
-              />
+              {p.mediaType === 'video' ? (
+                <video src={p.mediaUrl} controls preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+              ) : (
+                <img
+                  src={p.mediaUrl}
+                  alt="Publicación"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  loading="lazy"
+                />
+              )}
             </div>
             <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
               <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>

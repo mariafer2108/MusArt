@@ -13,7 +13,8 @@ export type Post = {
   author: string
   title: string
   tags: string[]
-  imageUrl: string
+  mediaUrl: string
+  mediaType: 'image' | 'video'
   likesCount: number
   commentsCount: number
   sharesCount: number
@@ -29,7 +30,7 @@ export type AppOutletContext = {
   toggleLike: (postId: string) => void
   addComment: (postId: string, text: string) => void
   sharePost: (postId: string) => Promise<void>
-  addPost: (input: { title: string; tags: string[]; imageUrl: string }) => Promise<void>
+  addPost: (input: { title: string; tags: string[]; mediaUrl: string; mediaType: 'image' | 'video' }) => Promise<void>
   updatePost: (postId: string, input: { title: string; tags: string[] }) => Promise<void>
   token: string | null
   setToken: (token: string | null) => void
@@ -172,7 +173,7 @@ function AppLayout() {
     }
   }
 
-  async function addPost(input: { title: string; tags: string[]; imageUrl: string }) {
+  async function addPost(input: { title: string; tags: string[]; mediaUrl: string; mediaType: 'image' | 'video' }) {
     const r = await api<{ post: Post }>('/api/posts', { method: 'POST', body: JSON.stringify(input) })
     setPosts((prev) => [r.post, ...prev])
   }
