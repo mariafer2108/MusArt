@@ -240,6 +240,34 @@ app.delete('/api/admin/users/:username', async (req, res) => {
   res.json({ ok: true, deletedUsername: username })
 })
 
+app.delete('/api/admin/reset-db', async (req, res) => {
+  await ensureSchema()
+  const db = getPool()
+  if (!db) return res.status(500).json({ error: 'db_not_configured' })
+
+  const adminSecret = process.env.ADMIN_SECRET || ''
+  if (!adminSecret) return res.status(501).json({ error: 'admin_not_configured' })
+
+  const provided = String(req.header('x-admin-secret') || req.query?.secret || '')
+  if (provided !== adminSecret) return res.status(401).json({ error: 'unauthorized' })
+
+  await db.query('BEGIN')
+  try {
+    await db.query(`TRUNCATE TABLE comments RESTART IDENTITY CASCADE`)
+    await db.query(`TRUNCATE TABLE likes RESTART IDENTITY CASCADE`)
+    await db.query(`TRUNCATE TABLE posts RESTART IDENTITY CASCADE`)
+    await db.query(`TRUNCATE TABLE follows RESTART IDENTITY CASCADE`)
+    await db.query(`TRUNCATE TABLE user_interests RESTART IDENTITY CASCADE`)
+    await db.query(`TRUNCATE TABLE oauth_accounts RESTART IDENTITY CASCADE`)
+    await db.query(`TRUNCATE TABLE users RESTART IDENTITY CASCADE`)
+    await db.query('COMMIT')
+    return res.json({ ok: true, reset: 'all_data_deleted' })
+  } catch (e) {
+    await db.query('ROLLBACK')
+    return res.status(500).json({ error: 'reset_failed' })
+  }
+})
+
 app.get('/api/users', async (_req, res) => {
   await ensureSchema()
   const db = getPool()
