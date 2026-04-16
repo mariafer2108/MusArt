@@ -5,10 +5,14 @@ import type { AppOutletContext } from '../ui/AppLayout'
 type Tab = 'portafolio' | 'comisiones'
 
 function Profile() {
-  const { posts, following, toggleFollow, toggleLike, addComment, sharePost } = useOutletContext<AppOutletContext>()
+  const { posts, following, toggleFollow, toggleLike, addComment, sharePost, token } = useOutletContext<AppOutletContext>()
   const [tab, setTab] = useState<Tab>('portafolio')
   const [openPostId, setOpenPostId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [savingPassword, setSavingPassword] = useState(false)
+  const [passwordMsg, setPasswordMsg] = useState<string | null>(null)
 
   const portfolio = useMemo(
     () => [
@@ -36,6 +40,60 @@ function Profile() {
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
+      <div className="card" style={{ padding: 16 }}>
+        <div style={{ fontWeight: 900, marginBottom: 10 }}>Seguridad</div>
+        <div style={{ color: 'var(--muted)', fontWeight: 600, marginBottom: 10 }}>
+          Si antes entraste con Google, aquí puedes crear una contraseña para iniciar sesión con correo y contraseña.
+        </div>
+        <div style={{ display: 'grid', gap: 10, maxWidth: 520 }}>
+          <input
+            className="input"
+            type="password"
+            placeholder="Nueva contraseña (mínimo 6)"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+          />
+          <input
+            className="input"
+            type="password"
+            placeholder="Confirmar contraseña"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+          />
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button
+              className="button"
+              type="button"
+              disabled={!token || savingPassword || newPassword.length < 6 || newPassword !== confirmPassword}
+              onClick={async () => {
+                if (!token) return
+                setPasswordMsg(null)
+                setSavingPassword(true)
+                try {
+                  const r = await fetch('/api/auth/set-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ password: newPassword })
+                  })
+                  const d = await r.json().catch(() => null)
+                  if (!r.ok) throw new Error(d?.error ?? 'set_password_failed')
+                  setPasswordMsg('Contraseña guardada. Ya puedes iniciar sesión con tu correo y contraseña.')
+                  setNewPassword('')
+                  setConfirmPassword('')
+                } catch {
+                  setPasswordMsg('No se pudo guardar la contraseña.')
+                } finally {
+                  setSavingPassword(false)
+                }
+              }}
+            >
+              Guardar contraseña
+            </button>
+          </div>
+          {passwordMsg ? <div className="pill">{passwordMsg}</div> : null}
+        </div>
+      </div>
+
       <div className="card" style={{ padding: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

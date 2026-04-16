@@ -219,6 +219,20 @@ app.post('/api/auth/login', async (req, res) => {
   res.json({ token, user })
 })
 
+app.post('/api/auth/set-password', async (req, res) => {
+  await ensureSchema()
+  const db = getPool()
+  if (!db) return res.status(500).json({ error: 'db_not_configured' })
+  const user = requireAuth(req, res)
+  if (!user) return
+
+  const password = String(req.body?.password ?? '')
+  if (password.length < 6 || password.length > 100) return res.status(400).json({ error: 'invalid_password' })
+  const passwordHash = await bcrypt.hash(password, 10)
+  await db.query(`UPDATE users SET password_hash = $2 WHERE id = $1`, [user.id, passwordHash])
+  res.json({ ok: true })
+})
+
 app.delete('/api/admin/users/:username', async (req, res) => {
   await ensureSchema()
   const db = getPool()
