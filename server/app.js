@@ -159,22 +159,21 @@ app.get('/api/health', async (_req, res) => {
 })
 
 app.post('/api/blob/upload', async (req, res) => {
-  const tokenFromQuery = req.query?.auth ? String(req.query.auth) : ''
-  const tokenFromPayload = typeof req.body?.clientPayload === 'string' ? String(req.body.clientPayload) : ''
-  const bearer = req.header('authorization') || ''
-  const tokenFromBearer = bearer.startsWith('Bearer ') ? bearer.slice('Bearer '.length) : ''
-  const token = tokenFromBearer || tokenFromPayload || tokenFromQuery
-  try {
-    const payload = jwt.verify(token, JWT_SECRET)
-    if (!payload?.id || !payload?.username) return res.status(401).json({ error: 'unauthorized' })
-  } catch {
-    return res.status(401).json({ error: 'unauthorized' })
-  }
-
   const response = await handleUpload({
     request: req,
     body: req.body,
-    onBeforeGenerateToken: async (_pathname) => {
+    onBeforeGenerateToken: async (_pathname, clientPayload) => {
+      const tokenFromPayload = typeof clientPayload === 'string' ? clientPayload : ''
+      const tokenFromQuery = req.query?.auth ? String(req.query.auth) : ''
+      const bearer = req.header('authorization') || ''
+      const tokenFromBearer = bearer.startsWith('Bearer ') ? bearer.slice('Bearer '.length) : ''
+      const token = tokenFromBearer || tokenFromPayload || tokenFromQuery
+      try {
+        const payload = jwt.verify(token, JWT_SECRET)
+        if (!payload?.id || !payload?.username) throw new Error('unauthorized')
+      } catch {
+        throw new Error('unauthorized')
+      }
       return {
         addRandomSuffix: true,
         allowedContentTypes: ['image/*', 'video/*'],
