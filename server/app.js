@@ -149,7 +149,13 @@ app.use((req, _res, next) => {
 })
 
 app.get('/api/health', async (_req, res) => {
-  res.json({ ok: true, dbConfigured: Boolean(DATABASE_URL), blobConfigured: Boolean(process.env.BLOB_READ_WRITE_TOKEN) })
+  res.json({
+    ok: true,
+    dbConfigured: Boolean(DATABASE_URL),
+    blobConfigured: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
+    adminConfigured: Boolean(process.env.ADMIN_SECRET),
+    vercelCommit: process.env.VERCEL_GIT_COMMIT_SHA || null
+  })
 })
 
 app.post('/api/blob/upload', async (req, res) => {
