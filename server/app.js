@@ -219,6 +219,27 @@ app.post('/api/auth/login', async (req, res) => {
   res.json({ token, user })
 })
 
+app.delete('/api/admin/users/:username', async (req, res) => {
+  await ensureSchema()
+  const db = getPool()
+  if (!db) return res.status(500).json({ error: 'db_not_configured' })
+
+  const adminSecret = process.env.ADMIN_SECRET || ''
+  if (!adminSecret) return res.status(501).json({ error: 'admin_not_configured' })
+
+  const provided = String(req.header('x-admin-secret') || req.query?.secret || '')
+  if (provided !== adminSecret) return res.status(401).json({ error: 'unauthorized' })
+
+  const username = String(req.params.username || '').trim()
+  if (!username) return res.status(400).json({ error: 'invalid_username' })
+
+  const found = await db.query(`SELECT id FROM users WHERE username = $1 LIMIT 1`, [username])
+  if (!found.rowCount) return res.status(404).json({ error: 'not_found' })
+
+  await db.query(`DELETE FROM users WHERE id = $1`, [found.rows[0].id])
+  res.json({ ok: true, deletedUsername: username })
+})
+
 app.get('/api/users', async (_req, res) => {
   await ensureSchema()
   const db = getPool()
