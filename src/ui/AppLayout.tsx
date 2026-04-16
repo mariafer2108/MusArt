@@ -35,6 +35,9 @@ export type AppOutletContext = {
   token: string | null
   setToken: (token: string | null) => void
   meUsername: string | null
+  meBio: string
+  meAvatarUrl: string | null
+  saveMyProfile: (input: { bio: string; avatarUrl: string | null }) => Promise<void>
 }
 
 function decodeJwtPayload(token: string): unknown {
@@ -52,6 +55,8 @@ function AppLayout() {
   const [posts, setPosts] = useState<Post[]>([])
   const [following, setFollowing] = useState<Set<string>>(() => new Set())
   const [token, setTokenState] = useState<string | null>(() => localStorage.getItem('musart_token'))
+  const [meBio, setMeBio] = useState('')
+  const [meAvatarUrl, setMeAvatarUrl] = useState<string | null>(null)
 
   const meUsername = useMemo(() => {
     if (!token) return null
@@ -106,11 +111,21 @@ function AppLayout() {
   useEffect(() => {
     if (!token) {
       setFollowing(new Set())
+      setMeBio('')
+      setMeAvatarUrl(null)
       return
     }
-    api<{ following: string[] }>('/api/me/following')
-      .then((d) => setFollowing(new Set(d.following)))
-      .catch(() => setFollowing(new Set()))
+    api<{ following: string[]; user?: { bio?: string; avatarUrl?: string | null } }>('/api/me')
+      .then((d) => {
+        setFollowing(new Set(d.following))
+        setMeBio(String(d.user?.bio ?? ''))
+        setMeAvatarUrl(d.user?.avatarUrl ?? null)
+      })
+      .catch(() => {
+        setFollowing(new Set())
+        setMeBio('')
+        setMeAvatarUrl(null)
+      })
   }, [token])
 
   function toggleFollow(author: string) {
@@ -188,6 +203,15 @@ function AppLayout() {
     setPosts((prev) => prev.map((p) => (p.id === postId ? r.post : p)))
   }
 
+  async function saveMyProfile(input: { bio: string; avatarUrl: string | null }) {
+    const r = await api<{ user: { bio?: string; avatarUrl?: string | null } }>('/api/me/profile', {
+      method: 'PATCH',
+      body: JSON.stringify(input)
+    })
+    setMeBio(String(r.user?.bio ?? ''))
+    setMeAvatarUrl(r.user?.avatarUrl ?? null)
+  }
+
   return (
     <div className="app-shell">
       <div className="app-frame">
@@ -243,7 +267,10 @@ function AppLayout() {
                     updatePost,
                     token,
                     setToken,
-                    meUsername
+                    meUsername,
+                    meBio,
+                    meAvatarUrl,
+                    saveMyProfile
                   } satisfies AppOutletContext
                 }
               />

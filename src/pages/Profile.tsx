@@ -1,15 +1,20 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import type { AppOutletContext } from '../ui/AppLayout'
 import AutoVideo from '../ui/AutoVideo'
+import { upload } from '@vercel/blob/client'
 
 type Tab = 'portafolio' | 'comisiones'
 
 function Profile() {
-  const { posts, following, toggleFollow, toggleLike, addComment, sharePost, meUsername } = useOutletContext<AppOutletContext>()
+  const { posts, following, toggleFollow, toggleLike, addComment, sharePost, meUsername, meBio, meAvatarUrl, token, saveMyProfile } =
+    useOutletContext<AppOutletContext>()
   const [tab, setTab] = useState<Tab>('portafolio')
   const [openPostId, setOpenPostId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
+  const [bioDraft, setBioDraft] = useState(meBio)
+  const [avatarDraftUrl, setAvatarDraftUrl] = useState<string | null>(meAvatarUrl)
+  const [savingProfile, setSavingProfile] = useState(false)
 
   const portfolio = useMemo(
     () => [
@@ -28,6 +33,11 @@ function Profile() {
   const authorPosts = useMemo(() => (meUsername ? posts.filter((p) => p.author === meUsername) : []), [meUsername, posts])
   const openPost = useMemo(() => (openPostId ? posts.find((p) => p.id === openPostId) ?? null : null), [openPostId, posts])
 
+  useEffect(() => {
+    setBioDraft(meBio)
+    setAvatarDraftUrl(meAvatarUrl)
+  }, [meBio, meAvatarUrl])
+
   function submitComment() {
     if (!openPost) return
     const text = draft.trim()
@@ -41,10 +51,16 @@ function Profile() {
       <div className="card" style={{ padding: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div className="story"><div /></div>
+            {avatarDraftUrl ? (
+              <div className="story" style={{ overflow: 'hidden' }}>
+                <img src={avatarDraftUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 999 }} />
+              </div>
+            ) : (
+              <div className="story"><div /></div>
+            )}
             <div>
               <div style={{ fontWeight: 900, fontSize: 18 }}>{author}</div>
-              <div style={{ color: 'var(--muted)' }}>Artista en MusArt</div>
+              <div style={{ color: 'var(--muted)' }}>{meBio || 'Artista en MusArt'}</div>
               <div className="stat-row" style={{ marginTop: 8 }}>
                 <span>{authorPosts.length} Publicaciones</span>
                 <span>— Seguidores</span>
@@ -53,9 +69,50 @@ function Profile() {
             </div>
           </div>
           {isMe ? (
-            <button className="button secondary" type="button" disabled>
-              Mi perfil
-            </button>
+            <div style={{ display: 'grid', gap: 8, width: 'min(420px, 100%)' }}>
+              <textarea
+                className="input textarea"
+                placeholder="Describe tu perfil..."
+                style={{ height: 92 }}
+                value={bioDraft}
+                onChange={(e) => setBioDraft(e.target.value.slice(0, 220))}
+              />
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <input
+                  className="input"
+                  type="file"
+                  accept="image/*"
+                  style={{ maxWidth: 220 }}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0]
+                    if (!file || !token) return
+                    const ext = (file.name.split('.').pop() || '').toLowerCase()
+                    const safeExt = ext && ext.length <= 8 ? ext : 'jpg'
+                    const blob = await upload(`avatars/${Date.now()}-${Math.random().toString(16).slice(2)}.${safeExt}`, file, {
+                      access: 'public',
+                      handleUploadUrl: '/api/blob/upload',
+                      headers: { Authorization: `Bearer ${token}` }
+                    })
+                    setAvatarDraftUrl(blob.url)
+                  }}
+                />
+                <button
+                  className="button"
+                  type="button"
+                  disabled={savingProfile}
+                  onClick={async () => {
+                    setSavingProfile(true)
+                    try {
+                      await saveMyProfile({ bio: bioDraft.trim(), avatarUrl: avatarDraftUrl })
+                    } finally {
+                      setSavingProfile(false)
+                    }
+                  }}
+                >
+                  Guardar perfil
+                </button>
+              </div>
+            </div>
           ) : (
             <button className={following.has(author) ? 'button secondary' : 'button'} type="button" onClick={() => toggleFollow(author)}>
               {following.has(author) ? 'Siguiendo' : 'Seguir'}

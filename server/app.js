@@ -43,9 +43,13 @@ async function ensureSchema() {
       username text UNIQUE NOT NULL,
       email text UNIQUE NOT NULL,
       password_hash text NOT NULL,
+      avatar_url text,
+      bio text,
       created_at timestamptz NOT NULL DEFAULT now()
     );
   `)
+  await p.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url text;`)
+  await p.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS bio text;`)
   await p.query(`
     CREATE TABLE IF NOT EXISTS posts (
       id uuid PRIMARY KEY,
@@ -202,7 +206,7 @@ app.post('/api/auth/register', async (req, res) => {
   const id = crypto.randomUUID()
   try {
     const created = await db.query(
-      `INSERT INTO users (id, username, email, password_hash) VALUES ($1, $2, $3, $4) RETURNING id, username`,
+      `INSERT INTO users (id, username, email, password_hash) VALUES ($1, $2, $3, $4) RETURNING id, username, avatar_url, bio`,
       [id, u, e, passwordHash]
     )
     const user = created.rows[0]
@@ -221,14 +225,16 @@ app.post('/api/auth/login', async (req, res) => {
   const password = String(req.body?.password ?? '')
   if (login.length < 3 || password.length < 6) return res.status(400).json({ error: 'invalid_input' })
   const isEmail = login.includes('@')
-  const q = isEmail ? `SELECT id, username, password_hash FROM users WHERE email = $1 LIMIT 1` : `SELECT id, username, password_hash FROM users WHERE username = $1 LIMIT 1`
+  const q = isEmail
+    ? `SELECT id, username, password_hash, avatar_url, bio FROM users WHERE email = $1 LIMIT 1`
+    : `SELECT id, username, password_hash, avatar_url, bio FROM users WHERE username = $1 LIMIT 1`
   const value = isEmail ? login.toLowerCase() : login
   const result = await db.query(q, [value])
   const row = result.rows[0]
   if (!row) return res.status(401).json({ error: 'invalid_credentials' })
   const ok = await bcrypt.compare(password, String(row.password_hash))
   if (!ok) return res.status(401).json({ error: 'invalid_credentials' })
-  const user = { id: String(row.id), username: String(row.username) }
+  const user = { id: String(row.id), username: String(row.username), avatarUrl: row.avatar_url || null, bio: row.bio || '' }
   const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '30d' })
   res.json({ token, user })
 })
@@ -333,6 +339,8 @@ app.get('/api/me', async (req, res) => {
   if (!user) return
 
   const interestsResult = await db.query(`SELECT interest FROM user_interests WHERE user_id = $1 ORDER BY interest ASC`, [user.id])
+  const meResult = await db.query(`SELECT username, avatar_url, bio FROM users WHERE id = $1 LIMIT 1`, [user.id])
+  const meRow = meResult.rows[0] || { username: user.username, avatar_url: null, bio: '' }
   const followingResult = await db.query(
     `
       SELECT u.username
@@ -344,10 +352,29 @@ app.get('/api/me', async (req, res) => {
     [user.id]
   )
   res.json({
-    user,
+    user: {
+      id: user.id,
+      username: String(meRow.username || user.username),
+      avatarUrl: meRow.avatar_url || null,
+      bio: String(meRow.bio || '')
+    },
     interests: interestsResult.rows.map((r) => r.interest),
     following: followingResult.rows.map((r) => r.username)
   })
+})
+
+app.patch('/api/me/profile', async (req, res) => {
+  await ensureSchema()
+  const db = getPool()
+  if (!db) return res.status(500).json({ error: 'db_not_configured' })
+  const user = requireAuth(req, res)
+  if (!user) return
+
+  const bio = String(req.body?.bio ?? '').trim().slice(0, 220)
+  const avatarUrlRaw = String(req.body?.avatarUrl ?? '').trim()
+  const avatarUrl = avatarUrlRaw ? avatarUrlRaw.slice(0, 2000) : null
+  await db.query(`UPDATE users SET bio = $2, avatar_url = $3 WHERE id = $1`, [user.id, bio, avatarUrl])
+  res.json({ user: { id: user.id, username: user.username, bio, avatarUrl } })
 })
 
 app.get('/api/me/interests', async (req, res) => {
