@@ -6,7 +6,7 @@ import AutoVideo from '../ui/AutoVideo'
 type Tab = 'portafolio' | 'comisiones'
 
 function Profile() {
-  const { posts, following, toggleFollow, toggleLike, addComment, sharePost, token } = useOutletContext<AppOutletContext>()
+  const { posts, following, toggleFollow, toggleLike, addComment, sharePost, token, meUsername } = useOutletContext<AppOutletContext>()
   const [tab, setTab] = useState<Tab>('portafolio')
   const [openPostId, setOpenPostId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
@@ -27,8 +27,9 @@ function Profile() {
     []
   )
 
-  const author = 'Xanty_Morita'
-  const authorPosts = useMemo(() => posts.filter((p) => p.author === author), [posts])
+  const author = meUsername || 'Mi perfil'
+  const isMe = Boolean(meUsername) && author === meUsername
+  const authorPosts = useMemo(() => (meUsername ? posts.filter((p) => p.author === meUsername) : []), [meUsername, posts])
   const openPost = useMemo(() => (openPostId ? posts.find((p) => p.id === openPostId) ?? null : null), [openPostId, posts])
 
   function submitComment() {
@@ -100,18 +101,24 @@ function Profile() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div className="story"><div /></div>
             <div>
-              <div style={{ fontWeight: 900, fontSize: 18 }}>Xanty_Morita</div>
-              <div style={{ color: 'var(--muted)' }}>Ilustradora freelance, comisiones abiertas</div>
+              <div style={{ fontWeight: 900, fontSize: 18 }}>{author}</div>
+              <div style={{ color: 'var(--muted)' }}>Artista en MusArt</div>
               <div className="stat-row" style={{ marginTop: 8 }}>
-                <span>21 Publicaciones</span>
-                <span>162 Seguidores</span>
-                <span>154 Siguiendo</span>
+                <span>{authorPosts.length} Publicaciones</span>
+                <span>— Seguidores</span>
+                <span>{following.size} Siguiendo</span>
               </div>
             </div>
           </div>
-          <button className={following.has(author) ? 'button secondary' : 'button'} type="button" onClick={() => toggleFollow(author)}>
-            {following.has(author) ? 'Siguiendo' : 'Seguir'}
-          </button>
+          {isMe ? (
+            <button className="button secondary" type="button" disabled>
+              Mi perfil
+            </button>
+          ) : (
+            <button className={following.has(author) ? 'button secondary' : 'button'} type="button" onClick={() => toggleFollow(author)}>
+              {following.has(author) ? 'Siguiendo' : 'Seguir'}
+            </button>
+          )}
         </div>
 
         <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
