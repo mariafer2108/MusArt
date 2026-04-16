@@ -54,7 +54,12 @@ function Create() {
       await addPost({ title, tags, mediaUrl: blob.url, mediaType })
       navigate('/app')
     } catch (e: any) {
-      setError(e?.message ?? 'No se pudo publicar. Intenta de nuevo.')
+      if (String(e?.message || '') === 'unauthorized') {
+        setError('Tu sesión expiró. Inicia sesión otra vez.')
+        navigate('/', { replace: true })
+      } else {
+        setError(e?.message ?? 'No se pudo publicar. Intenta de nuevo.')
+      }
     } finally {
       setSaving(false)
     }
