@@ -47,7 +47,7 @@ function Create() {
       const blob = await upload(`posts/${Date.now()}-${Math.random().toString(16).slice(2)}.${safeExt}`, file, {
         access: 'public',
         handleUploadUrl: '/api/blob/upload',
-        clientPayload: token,
+        headers: { Authorization: `Bearer ${token}` },
         multipart: file.size > 100 * 1024 * 1024
       })
       const mediaType = file.type.startsWith('video/') ? 'video' : 'image'

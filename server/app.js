@@ -159,33 +159,35 @@ app.get('/api/health', async (_req, res) => {
 })
 
 app.post('/api/blob/upload', async (req, res) => {
-  const response = await handleUpload({
-    request: req,
-    body: req.body,
-    onBeforeGenerateToken: async (_pathname, clientPayload) => {
-      const tokenFromPayload = typeof clientPayload === 'string' ? clientPayload : ''
-      const tokenFromQuery = req.query?.auth ? String(req.query.auth) : ''
-      const bearer = req.header('authorization') || ''
-      const tokenFromBearer = bearer.startsWith('Bearer ') ? bearer.slice('Bearer '.length) : ''
-      const token = tokenFromBearer || tokenFromPayload || tokenFromQuery
-      try {
-        const payload = jwt.verify(token, JWT_SECRET)
-        if (!payload?.id || !payload?.username) throw new Error('unauthorized')
-      } catch {
-        throw new Error('unauthorized')
-      }
-      return {
-        addRandomSuffix: true,
-        allowedContentTypes: ['image/*', 'video/*'],
-        maximumSizeInBytes: 300 * 1024 * 1024
-      }
-    },
-    onUploadCompleted: async () => {}
-  })
+  try {
+    const result = await handleUpload({
+      request: req,
+      body: req.body,
+      onBeforeGenerateToken: async (_pathname) => {
+        const bearer = String(req.header('authorization') || '')
+        const tokenFromBearer = bearer.startsWith('Bearer ') ? bearer.slice('Bearer '.length) : ''
+        try {
+          const payload = jwt.verify(tokenFromBearer, JWT_SECRET)
+          if (!payload?.id || !payload?.username) throw new Error('unauthorized')
+          return {
+            addRandomSuffix: true,
+            allowedContentTypes: ['image/*', 'video/*'],
+            maximumSizeInBytes: 300 * 1024 * 1024,
+            tokenPayload: String(payload.id)
+          }
+        } catch {
+          throw new Error('unauthorized')
+        }
+      },
+      onUploadCompleted: async () => {}
+    })
 
-  res.status(response.status)
-  response.headers.forEach((value, key) => res.setHeader(key, value))
-  res.send(await response.text())
+    return res.json(result)
+  } catch (e) {
+    const msg = typeof e?.message === 'string' ? e.message : 'upload_failed'
+    const code = msg === 'unauthorized' ? 401 : 400
+    return res.status(code).json({ error: msg })
+  }
 })
 
 app.post('/api/auth/register', async (req, res) => {
