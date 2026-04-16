@@ -73,18 +73,6 @@ function Login() {
               <span className="pill">¿No tienes cuenta?</span>
               <Link className="button ghost" to="/registro">Crear cuenta</Link>
             </div>
-
-            <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
-              <button className="button secondary" type="button" onClick={() => { window.location.href = '/api/oauth/google/start' }}>
-                Inicia sesión con Google
-              </button>
-              <button className="button secondary" type="button" onClick={() => { window.location.href = '/api/oauth/apple/start' }}>
-                Inicia sesión con Apple
-              </button>
-              <button className="button secondary" type="button" onClick={() => { window.location.href = '/api/oauth/instagram/start' }}>
-                Inicia sesión con Instagram
-              </button>
-            </div>
           </div>
         </div>
       </div>
