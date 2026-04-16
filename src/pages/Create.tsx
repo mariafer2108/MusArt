@@ -46,7 +46,8 @@ function Create() {
       const safeExt = ext && ext.length <= 8 ? ext : 'bin'
       const blob = await upload(`posts/${Date.now()}-${Math.random().toString(16).slice(2)}.${safeExt}`, file, {
         access: 'public',
-        handleUploadUrl: `/api/blob/upload?auth=${encodeURIComponent(token)}`,
+        handleUploadUrl: '/api/blob/upload',
+        clientPayload: token,
         multipart: file.size > 100 * 1024 * 1024
       })
       const mediaType = file.type.startsWith('video/') ? 'video' : 'image'

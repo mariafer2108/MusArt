@@ -159,10 +159,17 @@ app.get('/api/health', async (_req, res) => {
 })
 
 app.post('/api/blob/upload', async (req, res) => {
-  const authHeader = req.header('authorization') || (req.query?.auth ? `Bearer ${String(req.query.auth)}` : '')
-  if (authHeader && !req.header('authorization')) req.headers['authorization'] = authHeader
-  const user = requireAuth(req, res)
-  if (!user) return
+  const tokenFromQuery = req.query?.auth ? String(req.query.auth) : ''
+  const tokenFromPayload = typeof req.body?.clientPayload === 'string' ? String(req.body.clientPayload) : ''
+  const bearer = req.header('authorization') || ''
+  const tokenFromBearer = bearer.startsWith('Bearer ') ? bearer.slice('Bearer '.length) : ''
+  const token = tokenFromBearer || tokenFromPayload || tokenFromQuery
+  try {
+    const payload = jwt.verify(token, JWT_SECRET)
+    if (!payload?.id || !payload?.username) return res.status(401).json({ error: 'unauthorized' })
+  } catch {
+    return res.status(401).json({ error: 'unauthorized' })
+  }
 
   const response = await handleUpload({
     request: req,
