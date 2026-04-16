@@ -134,7 +134,7 @@ function PostCard({
       </div>
       <div className="post-image">
         {post.mediaType === 'video' ? (
-          <video src={post.mediaUrl} controls playsInline preload="metadata" />
+          <video src={post.mediaUrl} autoPlay muted loop playsInline preload="metadata" />
         ) : (
           <img src={post.mediaUrl} alt="Publicación" loading="lazy" />
         )}

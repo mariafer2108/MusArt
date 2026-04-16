@@ -149,7 +149,7 @@ function Profile() {
                 onClick={() => setOpenPostId(p.id)}
               >
                 {p.mediaType === 'video' ? (
-                  <video src={p.mediaUrl} controls preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                  <video src={p.mediaUrl} autoPlay muted loop playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                 ) : (
                   <img src={p.mediaUrl} alt="Portafolio" loading="lazy" />
                 )}
@@ -224,7 +224,7 @@ function Profile() {
             <div className="modal-body">
               <div className="modal-image">
                 {openPost.mediaType === 'video' ? (
-                  <video src={openPost.mediaUrl} controls playsInline style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
+                  <video src={openPost.mediaUrl} autoPlay muted loop playsInline style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
                 ) : (
                   <img src={openPost.mediaUrl} alt="Publicación" />
                 )}
