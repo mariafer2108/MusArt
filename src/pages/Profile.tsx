@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import type { AppOutletContext } from '../ui/AppLayout'
+import AutoVideo from '../ui/AutoVideo'
 
 type Tab = 'portafolio' | 'comisiones'
 
@@ -149,7 +150,7 @@ function Profile() {
                 onClick={() => setOpenPostId(p.id)}
               >
                 {p.mediaType === 'video' ? (
-                  <video src={p.mediaUrl} autoPlay muted loop playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                  <AutoVideo src={p.mediaUrl} className="video-fill" />
                 ) : (
                   <img src={p.mediaUrl} alt="Portafolio" loading="lazy" />
                 )}
@@ -224,7 +225,7 @@ function Profile() {
             <div className="modal-body">
               <div className="modal-image">
                 {openPost.mediaType === 'video' ? (
-                  <video src={openPost.mediaUrl} autoPlay muted loop playsInline style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
+                  <AutoVideo src={openPost.mediaUrl} fit="contain" className="video-fill" />
                 ) : (
                   <img src={openPost.mediaUrl} alt="Publicación" />
                 )}

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import type { AppOutletContext, Post } from '../ui/AppLayout'
+import AutoVideo from '../ui/AutoVideo'
 
 function formatTimeAgo(createdAt: string) {
   const created = new Date(createdAt).getTime()
@@ -134,7 +135,7 @@ function PostCard({
       </div>
       <div className="post-image">
         {post.mediaType === 'video' ? (
-          <video src={post.mediaUrl} autoPlay muted loop playsInline preload="metadata" />
+          <AutoVideo src={post.mediaUrl} />
         ) : (
           <img src={post.mediaUrl} alt="Publicación" loading="lazy" />
         )}

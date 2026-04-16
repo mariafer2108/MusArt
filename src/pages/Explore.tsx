@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
 import type { AppOutletContext } from '../ui/AppLayout'
+import AutoVideo from '../ui/AutoVideo'
 
 function Explore() {
   const { posts, following, toggleFollow, meUsername } = useOutletContext<AppOutletContext>()
@@ -133,7 +134,7 @@ function Explore() {
           <div key={p.id} className="card" style={{ padding: 14 }}>
             <div style={{ height: 180, borderRadius: 16, overflow: 'hidden', background: '#ddd' }}>
               {p.mediaType === 'video' ? (
-                <video src={p.mediaUrl} autoPlay muted loop playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                <AutoVideo src={p.mediaUrl} className="video-fill" />
               ) : (
                 <img
                   src={p.mediaUrl}
