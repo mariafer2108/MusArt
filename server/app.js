@@ -48,6 +48,7 @@ async function ensureSchema() {
       accepts_commissions boolean NOT NULL DEFAULT false,
       commission_categories text NOT NULL DEFAULT '[]',
       commission_price_info text NOT NULL DEFAULT '',
+      commission_terms text NOT NULL DEFAULT '',
       created_at timestamptz NOT NULL DEFAULT now()
     );
   `)
@@ -56,6 +57,7 @@ async function ensureSchema() {
   await p.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS accepts_commissions boolean NOT NULL DEFAULT false;`)
   await p.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS commission_categories text NOT NULL DEFAULT '[]';`)
   await p.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS commission_price_info text NOT NULL DEFAULT '';`)
+  await p.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS commission_terms text NOT NULL DEFAULT '';`)
   await p.query(`
     CREATE TABLE IF NOT EXISTS posts (
       id uuid PRIMARY KEY,
@@ -428,7 +430,7 @@ app.get('/api/me', async (req, res) => {
 
   const interestsResult = await db.query(`SELECT interest FROM user_interests WHERE user_id = $1 ORDER BY interest ASC`, [user.id])
   const meResult = await db.query(
-    `SELECT username, avatar_url, bio, accepts_commissions, commission_categories, commission_price_info FROM users WHERE id = $1 LIMIT 1`,
+    `SELECT username, avatar_url, bio, accepts_commissions, commission_categories, commission_price_info, commission_terms FROM users WHERE id = $1 LIMIT 1`,
     [user.id]
   )
   const meRow = meResult.rows[0] || {
@@ -437,7 +439,8 @@ app.get('/api/me', async (req, res) => {
     bio: '',
     accepts_commissions: false,
     commission_categories: '[]',
-    commission_price_info: ''
+    commission_price_info: '',
+    commission_terms: ''
   }
   const followingResult = await db.query(
     `
@@ -457,7 +460,8 @@ app.get('/api/me', async (req, res) => {
       bio: String(meRow.bio || ''),
       acceptsCommissions: Boolean(meRow.accepts_commissions),
       commissionCategories: safeJsonArrayText(meRow.commission_categories),
-      commissionPriceInfo: String(meRow.commission_price_info || '')
+      commissionPriceInfo: String(meRow.commission_price_info || ''),
+      commissionTerms: String(meRow.commission_terms || '')
     },
     interests: interestsResult.rows.map((r) => r.interest),
     following: followingResult.rows.map((r) => r.username)
@@ -838,11 +842,12 @@ app.patch('/api/me/commissions', async (req, res) => {
   const acceptsCommissions = Boolean(req.body?.acceptsCommissions)
   const categories = normalizeCommissionCategories(req.body?.categories)
   const priceInfo = String(req.body?.priceInfo ?? '').trim().slice(0, 800)
+  const terms = String(req.body?.terms ?? '').trim().slice(0, 2000)
   await db.query(
-    `UPDATE users SET accepts_commissions = $2, commission_categories = $3, commission_price_info = $4 WHERE id = $1`,
-    [user.id, acceptsCommissions, JSON.stringify(categories), priceInfo]
+    `UPDATE users SET accepts_commissions = $2, commission_categories = $3, commission_price_info = $4, commission_terms = $5 WHERE id = $1`,
+    [user.id, acceptsCommissions, JSON.stringify(categories), priceInfo, terms]
   )
-  res.json({ ok: true, acceptsCommissions, categories, priceInfo })
+  res.json({ ok: true, acceptsCommissions, categories, priceInfo, terms })
 })
 
 app.get('/api/me/commission-products', async (req, res) => {
@@ -946,7 +951,7 @@ app.get('/api/users/:username/commissions', async (req, res) => {
   const username = String(req.params.username || '').trim()
   if (!username) return res.status(400).json({ error: 'missing_username' })
   const userResult = await db.query(
-    `SELECT id, username, avatar_url, bio, accepts_commissions, commission_categories, commission_price_info FROM users WHERE username = $1 LIMIT 1`,
+    `SELECT id, username, avatar_url, bio, accepts_commissions, commission_categories, commission_price_info, commission_terms FROM users WHERE username = $1 LIMIT 1`,
     [username]
   )
   if (!userResult.rowCount) return res.status(404).json({ error: 'not_found' })
@@ -971,6 +976,7 @@ app.get('/api/users/:username/commissions', async (req, res) => {
     acceptsCommissions: Boolean(u.accepts_commissions),
     categories: safeJsonArrayText(u.commission_categories),
     priceInfo: String(u.commission_price_info || ''),
+    terms: String(u.commission_terms || ''),
     products
   })
 })

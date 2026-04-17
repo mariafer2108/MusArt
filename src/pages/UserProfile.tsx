@@ -24,6 +24,7 @@ function UserProfile() {
     { id: string; title: string; imageUrl: string; priceCents: number; currency: string; description: string }[]
   >([])
   const [accepts, setAccepts] = useState(false)
+  const [terms, setTerms] = useState('')
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -34,10 +35,12 @@ function UserProfile() {
         if (!r.ok) throw new Error(d?.error ?? 'request_failed')
         setCommissionProducts(Array.isArray(d?.products) ? d.products : [])
         setAccepts(Boolean(d?.acceptsCommissions))
+        setTerms(String(d?.terms ?? ''))
       })
       .catch(() => {
         setCommissionProducts([])
         setAccepts(false)
+        setTerms('')
       })
       .finally(() => setLoading(false))
   }, [target])
@@ -92,6 +95,11 @@ function UserProfile() {
           <div className="pill">{accepts ? 'Acepta comisiones' : 'No disponible'}</div>
         </div>
         {loading ? <div style={{ marginTop: 10, color: 'var(--muted)', fontWeight: 800 }}>Cargando...</div> : null}
+        {terms ? (
+          <div style={{ marginTop: 10, padding: 12, borderRadius: 14, background: '#f7f0ff', whiteSpace: 'pre-wrap', fontWeight: 650 }}>
+            {terms}
+          </div>
+        ) : null}
         <div className="grid" style={{ marginTop: 12 }}>
           {commissionProducts.map((p) => (
             <div key={p.id} className="card" style={{ padding: 12 }}>

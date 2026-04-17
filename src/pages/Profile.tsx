@@ -25,6 +25,11 @@ function Profile() {
     meAvatarUrl,
     token,
     saveMyProfile,
+    meAcceptsCommissions,
+    meCommissionCategories,
+    meCommissionPriceInfo,
+    meCommissionTerms,
+    saveMyCommissions,
     meCommissionProducts,
     createCommissionProduct,
     updateCommissionProduct,
@@ -47,6 +52,8 @@ function Profile() {
   const [productDescription, setProductDescription] = useState('')
   const [productImageUrl, setProductImageUrl] = useState<string>('')
   const [savingProduct, setSavingProduct] = useState(false)
+  const [termsDraft, setTermsDraft] = useState(meCommissionTerms)
+  const [savingTerms, setSavingTerms] = useState(false)
 
   const portfolio = useMemo(
     () => [
@@ -70,6 +77,10 @@ function Profile() {
     setBioDraft(meBio)
     setAvatarDraftUrl(meAvatarUrl)
   }, [meBio, meAvatarUrl, meUsername])
+
+  useEffect(() => {
+    setTermsDraft(meCommissionTerms)
+  }, [meCommissionTerms])
 
   function openNewProduct() {
     setEditingProductId(null)
@@ -274,6 +285,43 @@ function Profile() {
         </div>
       ) : (
         <div style={{ display: 'grid', gap: 16 }}>
+          <div className="card" style={{ padding: 16 }}>
+            <div style={{ fontWeight: 900, marginBottom: 8 }}>Términos y condiciones</div>
+            <div style={{ color: 'var(--muted)', fontWeight: 650, marginBottom: 10 }}>
+              Escribe tus reglas: pagos, revisiones, tiempos de entrega, uso comercial, reembolsos, etc.
+            </div>
+            <textarea
+              className="input textarea"
+              placeholder="Ej: 50% por adelantado. 2 revisiones incluidas. Entrega 7-14 días..."
+              style={{ height: 170 }}
+              value={termsDraft}
+              onChange={(e) => setTermsDraft(e.target.value.slice(0, 2000))}
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 12 }}>
+              <button
+                className="button"
+                type="button"
+                disabled={!token || savingTerms}
+                onClick={async () => {
+                  if (!token) return
+                  setSavingTerms(true)
+                  try {
+                    await saveMyCommissions({
+                      acceptsCommissions: meAcceptsCommissions,
+                      categories: meCommissionCategories,
+                      priceInfo: meCommissionPriceInfo,
+                      terms: termsDraft.trim()
+                    })
+                  } finally {
+                    setSavingTerms(false)
+                  }
+                }}
+              >
+                Guardar términos
+              </button>
+            </div>
+          </div>
+
           <div className="card" style={{ padding: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
               <div>

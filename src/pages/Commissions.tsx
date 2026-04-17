@@ -8,6 +8,7 @@ type Artist = {
   bio: string
   categories: string[]
   priceInfo: string
+  terms?: string
 }
 
 const CATEGORY_OPTIONS: { id: string; label: string }[] = [
@@ -20,7 +21,7 @@ const CATEGORY_OPTIONS: { id: string; label: string }[] = [
 
 function Commissions() {
   const navigate = useNavigate()
-  const { token, meUsername, meAcceptsCommissions, meCommissionCategories, meCommissionPriceInfo, saveMyCommissions } =
+  const { token, meUsername, meAcceptsCommissions, meCommissionCategories, meCommissionPriceInfo, meCommissionTerms, saveMyCommissions } =
     useOutletContext<AppOutletContext>()
 
   const [category, setCategory] = useState<string>('')
@@ -32,6 +33,7 @@ function Commissions() {
   const [acceptsDraft, setAcceptsDraft] = useState(meAcceptsCommissions)
   const [categoriesDraft, setCategoriesDraft] = useState<string[]>(meCommissionCategories)
   const [priceInfoDraft, setPriceInfoDraft] = useState(meCommissionPriceInfo)
+  const [termsDraft, setTermsDraft] = useState(meCommissionTerms)
   const [savingSettings, setSavingSettings] = useState(false)
 
   const [requestOpen, setRequestOpen] = useState(false)
@@ -44,7 +46,8 @@ function Commissions() {
     setAcceptsDraft(meAcceptsCommissions)
     setCategoriesDraft(meCommissionCategories)
     setPriceInfoDraft(meCommissionPriceInfo)
-  }, [meAcceptsCommissions, meCommissionCategories, meCommissionPriceInfo])
+    setTermsDraft(meCommissionTerms)
+  }, [meAcceptsCommissions, meCommissionCategories, meCommissionPriceInfo, meCommissionTerms])
 
   useEffect(() => {
     setLoading(true)
@@ -195,6 +198,13 @@ function Commissions() {
                 value={priceInfoDraft}
                 onChange={(e) => setPriceInfoDraft(e.target.value.slice(0, 800))}
               />
+              <textarea
+                className="input textarea"
+                placeholder="Términos y condiciones (pagos, revisiones, tiempos, uso comercial...)"
+                style={{ height: 160 }}
+                value={termsDraft}
+                onChange={(e) => setTermsDraft(e.target.value.slice(0, 2000))}
+              />
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
                 <button className="button secondary" type="button" onClick={() => setSettingsOpen(false)} disabled={savingSettings}>
                   Cancelar
@@ -206,7 +216,7 @@ function Commissions() {
                   onClick={async () => {
                     setSavingSettings(true)
                     try {
-                      await saveMyCommissions({ acceptsCommissions: acceptsDraft, categories: categoriesDraft, priceInfo: priceInfoDraft })
+                      await saveMyCommissions({ acceptsCommissions: acceptsDraft, categories: categoriesDraft, priceInfo: priceInfoDraft, terms: termsDraft })
                       setSettingsOpen(false)
                     } finally {
                       setSavingSettings(false)

@@ -44,7 +44,8 @@ export type AppOutletContext = {
   meAcceptsCommissions: boolean
   meCommissionCategories: string[]
   meCommissionPriceInfo: string
-  saveMyCommissions: (input: { acceptsCommissions: boolean; categories: string[]; priceInfo: string }) => Promise<void>
+  meCommissionTerms: string
+  saveMyCommissions: (input: { acceptsCommissions: boolean; categories: string[]; priceInfo: string; terms: string }) => Promise<void>
   meCommissionProducts: { id: string; title: string; imageUrl: string; priceCents: number; currency: string; description: string }[]
   refreshMyCommissionProducts: () => Promise<void>
   createCommissionProduct: (input: { title: string; imageUrl: string; priceCents: number; currency: string; description: string }) => Promise<void>
@@ -72,6 +73,7 @@ function AppLayout() {
   const [meAcceptsCommissions, setMeAcceptsCommissions] = useState(false)
   const [meCommissionCategories, setMeCommissionCategories] = useState<string[]>([])
   const [meCommissionPriceInfo, setMeCommissionPriceInfo] = useState('')
+  const [meCommissionTerms, setMeCommissionTerms] = useState('')
   const [meCommissionProducts, setMeCommissionProducts] = useState<
     { id: string; title: string; imageUrl: string; priceCents: number; currency: string; description: string }[]
   >([])
@@ -134,6 +136,7 @@ function AppLayout() {
       setMeAcceptsCommissions(false)
       setMeCommissionCategories([])
       setMeCommissionPriceInfo('')
+      setMeCommissionTerms('')
       setMeCommissionProducts([])
       return
     }
@@ -145,6 +148,7 @@ function AppLayout() {
         acceptsCommissions?: boolean
         commissionCategories?: string[]
         commissionPriceInfo?: string
+        commissionTerms?: string
       }
     }>('/api/me')
       .then((d) => {
@@ -154,6 +158,7 @@ function AppLayout() {
         setMeAcceptsCommissions(Boolean(d.user?.acceptsCommissions))
         setMeCommissionCategories(Array.isArray(d.user?.commissionCategories) ? d.user!.commissionCategories! : [])
         setMeCommissionPriceInfo(String(d.user?.commissionPriceInfo ?? ''))
+        setMeCommissionTerms(String(d.user?.commissionTerms ?? ''))
       })
       .catch(() => {
         setFollowing(new Set())
@@ -162,6 +167,7 @@ function AppLayout() {
         setMeAcceptsCommissions(false)
         setMeCommissionCategories([])
         setMeCommissionPriceInfo('')
+        setMeCommissionTerms('')
         setMeCommissionProducts([])
       })
   }, [token])
@@ -281,14 +287,15 @@ function AppLayout() {
     }
   }
 
-  async function saveMyCommissions(input: { acceptsCommissions: boolean; categories: string[]; priceInfo: string }) {
-    const r = await api<{ ok: true; acceptsCommissions: boolean; categories: string[]; priceInfo: string }>('/api/me/commissions', {
+  async function saveMyCommissions(input: { acceptsCommissions: boolean; categories: string[]; priceInfo: string; terms: string }) {
+    const r = await api<{ ok: true; acceptsCommissions: boolean; categories: string[]; priceInfo: string; terms: string }>('/api/me/commissions', {
       method: 'PATCH',
       body: JSON.stringify(input)
     })
     setMeAcceptsCommissions(Boolean(r.acceptsCommissions))
     setMeCommissionCategories(Array.isArray(r.categories) ? r.categories : [])
     setMeCommissionPriceInfo(String(r.priceInfo || ''))
+    setMeCommissionTerms(String(r.terms || ''))
   }
 
   async function createCommissionProduct(input: { title: string; imageUrl: string; priceCents: number; currency: string; description: string }) {
@@ -389,6 +396,7 @@ function AppLayout() {
                     meAcceptsCommissions,
                     meCommissionCategories,
                     meCommissionPriceInfo,
+                    meCommissionTerms,
                     saveMyCommissions,
                     meCommissionProducts,
                     refreshMyCommissionProducts,
