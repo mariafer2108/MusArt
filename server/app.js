@@ -61,6 +61,7 @@ async function ensureSchema() {
       id uuid PRIMARY KEY,
       user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       title text NOT NULL,
+      description text NOT NULL DEFAULT '',
       tags text NOT NULL DEFAULT '[]',
       image_url text NOT NULL,
       media_url text,
@@ -69,10 +70,12 @@ async function ensureSchema() {
       created_at timestamptz NOT NULL DEFAULT now()
     );
   `)
+  await p.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS description text NOT NULL DEFAULT '';`)
   await p.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_url text;`)
   await p.query(`ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_type text;`)
   await p.query(`UPDATE posts SET media_url = image_url WHERE media_url IS NULL;`)
   await p.query(`UPDATE posts SET media_type = 'image' WHERE media_type IS NULL;`)
+  await p.query(`UPDATE posts SET description = '' WHERE description IS NULL;`)
   await p.query(`
     CREATE TABLE IF NOT EXISTS likes (
       post_id uuid NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
@@ -562,6 +565,7 @@ app.get('/api/posts', async (req, res) => {
       SELECT
         p.id,
         p.title,
+        p.description,
         p.tags,
         COALESCE(p.media_url, p.image_url) as media_url,
         COALESCE(p.media_type, 'image') as media_type,
@@ -605,6 +609,7 @@ app.get('/api/posts', async (req, res) => {
     author: r.author,
     authorAvatarUrl: r.author_avatar_url || null,
     title: r.title,
+    description: String(r.description || ''),
     tags: JSON.parse(r.tags || '[]'),
     mediaUrl: r.media_url,
     mediaType: r.media_type,
@@ -625,16 +630,18 @@ app.post('/api/posts', async (req, res) => {
   const user = requireAuth(req, res)
   if (!user) return
   const title = String(req.body?.title ?? '').trim()
+  const description = String(req.body?.description ?? '').trim()
   const tags = normalizeTags(req.body?.tags)
   const mediaUrl = String(req.body?.mediaUrl ?? req.body?.imageUrl ?? '')
   const mediaType = String(req.body?.mediaType ?? (String(req.body?.imageUrl ?? '').startsWith('data:video') ? 'video' : 'image')).toLowerCase()
   if (title.length < 1 || title.length > 80) return res.status(400).json({ error: 'invalid_title' })
+  if (description.length > 500) return res.status(400).json({ error: 'invalid_description' })
   if (!mediaUrl) return res.status(400).json({ error: 'missing_media' })
   if (mediaType !== 'image' && mediaType !== 'video') return res.status(400).json({ error: 'invalid_media_type' })
   const id = crypto.randomUUID()
   const inserted = await p.query(
-    `INSERT INTO posts (id, user_id, title, tags, image_url, media_url, media_type) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, created_at`,
-    [id, user.id, title, JSON.stringify(tags), mediaUrl, mediaUrl, mediaType]
+    `INSERT INTO posts (id, user_id, title, description, tags, image_url, media_url, media_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, created_at`,
+    [id, user.id, title, description, JSON.stringify(tags), mediaUrl, mediaUrl, mediaType]
   )
   const avatarResult = await p.query(`SELECT avatar_url FROM users WHERE id = $1 LIMIT 1`, [user.id])
   const authorAvatarUrl = avatarResult.rows[0]?.avatar_url ?? null
@@ -645,6 +652,7 @@ app.post('/api/posts', async (req, res) => {
       author: user.username,
       authorAvatarUrl,
       title,
+      description,
       tags,
       mediaUrl,
       mediaType,
@@ -682,6 +690,7 @@ app.patch('/api/posts/:id', async (req, res) => {
       SELECT
         p.id,
         p.title,
+        p.description,
         p.tags,
         COALESCE(p.media_url, p.image_url) as media_url,
         COALESCE(p.media_type, 'image') as media_type,
@@ -720,6 +729,7 @@ app.patch('/api/posts/:id', async (req, res) => {
       author: row.author,
       authorAvatarUrl: row.author_avatar_url || null,
       title: row.title,
+      description: String(row.description || ''),
       tags: JSON.parse(row.tags || '[]'),
       mediaUrl: row.media_url,
       mediaType: row.media_type,

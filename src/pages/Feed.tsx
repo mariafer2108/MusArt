@@ -106,6 +106,7 @@ function PostCard({
               </div>
             </div>
             <div className="post-title">{post.title}</div>
+            {post.description ? <div className="post-desc">{post.description}</div> : null}
             <div className="post-tags" aria-label="Etiquetas">
               {post.tags.map((t) => (
                 <button key={t} type="button" className="tag" onClick={() => onTagClick(t)}>

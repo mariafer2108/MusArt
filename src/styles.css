@@ -397,6 +397,12 @@ body {
   margin-top: 2px;
   line-height: 1.15;
 }
+.post-desc {
+  margin-top: 6px;
+  color: rgba(43, 33, 65, 0.85);
+  font-weight: 650;
+  white-space: pre-wrap;
+}
 .post-tags {
   display: flex;
   flex-wrap: wrap;

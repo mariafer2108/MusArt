@@ -52,7 +52,7 @@ function Create() {
         multipart: file.size > 100 * 1024 * 1024
       })
       const mediaType = file.type.startsWith('video/') ? 'video' : 'image'
-      await addPost({ title: cleanTitle, tags, mediaUrl: blob.url, mediaType })
+      await addPost({ title: cleanTitle, description: text.trim().slice(0, 500), tags, mediaUrl: blob.url, mediaType })
       navigate('/app')
     } catch (e: any) {
       if (String(e?.message || '') === 'unauthorized') {
