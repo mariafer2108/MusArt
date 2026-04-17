@@ -34,6 +34,7 @@ export type AppOutletContext = {
   sharePost: (postId: string) => Promise<void>
   addPost: (input: { title: string; description: string; tags: string[]; mediaUrl: string; mediaType: 'image' | 'video' }) => Promise<void>
   updatePost: (postId: string, input: { title: string; tags: string[] }) => Promise<void>
+  deletePost: (postId: string) => Promise<void>
   token: string | null
   setToken: (token: string | null) => void
   meUsername: string | null
@@ -230,6 +231,11 @@ function AppLayout() {
     setPosts((prev) => prev.map((p) => (p.id === postId ? r.post : p)))
   }
 
+  async function deletePost(postId: string) {
+    await api<{ ok: true }>(`/api/posts/${encodeURIComponent(postId)}`, { method: 'DELETE' })
+    setPosts((prev) => prev.filter((p) => p.id !== postId))
+  }
+
   async function saveMyProfile(input: { username?: string; bio: string; avatarUrl: string | null }) {
     const beforeUsername = meUsername
     const r = await api<{ token?: string; user: { username?: string; bio?: string; avatarUrl?: string | null } }>('/api/me/profile', {
@@ -326,6 +332,7 @@ function AppLayout() {
                     sharePost,
                     addPost,
                     updatePost,
+                    deletePost,
                     token,
                     setToken,
                     meUsername,

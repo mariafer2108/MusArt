@@ -35,7 +35,8 @@ function PostCard({
   onAddComment,
   onShare,
   onTagClick,
-  onEdit
+  onEdit,
+  onDelete
 }: {
   post: Post
   isFollowing: boolean
@@ -46,6 +47,7 @@ function PostCard({
   onShare: (postId: string) => void
   onTagClick: (tag: string) => void
   onEdit: (postId: string, next: { title: string; tags: string[] }) => Promise<void>
+  onDelete: (postId: string) => Promise<void>
 }) {
   const [commentsOpen, setCommentsOpen] = useState(false)
   const [draft, setDraft] = useState('')
@@ -53,6 +55,7 @@ function PostCard({
   const [editTitle, setEditTitle] = useState(post.title)
   const [editTags, setEditTags] = useState(post.tags.map((t) => `#${t}`).join(' '))
   const [savingEdit, setSavingEdit] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   function submitComment() {
     const text = draft.trim()
@@ -117,18 +120,37 @@ function PostCard({
           </div>
         </div>
         {canEdit ? (
-          <button
-            type="button"
-            className="button secondary"
-            onClick={() => {
-              setEditTitle(post.title)
-              setEditTags(post.tags.map((t) => `#${t}`).join(' '))
-              setEditing(true)
-            }}
-            style={{ padding: '8px 12px', borderRadius: 999, fontSize: 12 }}
-          >
-            Editar
-          </button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button
+              type="button"
+              className="button secondary"
+              onClick={() => {
+                setEditTitle(post.title)
+                setEditTags(post.tags.map((t) => `#${t}`).join(' '))
+                setEditing(true)
+              }}
+              style={{ padding: '8px 12px', borderRadius: 999, fontSize: 12 }}
+            >
+              Editar
+            </button>
+            <button
+              type="button"
+              className="button secondary"
+              disabled={deleting}
+              onClick={async () => {
+                if (!confirm('¿Borrar esta publicación?')) return
+                setDeleting(true)
+                try {
+                  await onDelete(post.id)
+                } finally {
+                  setDeleting(false)
+                }
+              }}
+              style={{ padding: '8px 12px', borderRadius: 999, fontSize: 12 }}
+            >
+              Borrar
+            </button>
+          </div>
         ) : (
           <button
             type="button"
@@ -233,7 +255,8 @@ function PostCard({
 }
 
 function Feed() {
-  const { posts, following, toggleFollow, toggleLike, addComment, sharePost, updatePost, meUsername } = useOutletContext<AppOutletContext>()
+  const { posts, following, toggleFollow, toggleLike, addComment, sharePost, updatePost, deletePost, meUsername } =
+    useOutletContext<AppOutletContext>()
   const [activeTag, setActiveTag] = useState<string | null>(null)
   const filteredPosts = activeTag ? posts.filter((p) => p.tags.includes(activeTag)) : posts
 
@@ -262,6 +285,7 @@ function Feed() {
           onShare={sharePost}
           onTagClick={(t) => setActiveTag(t)}
           onEdit={(postId, next) => updatePost(postId, next)}
+          onDelete={deletePost}
         />
       ))}
     </div>

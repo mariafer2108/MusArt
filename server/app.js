@@ -743,6 +743,22 @@ app.patch('/api/posts/:id', async (req, res) => {
   })
 })
 
+app.delete('/api/posts/:id', async (req, res) => {
+  await ensureSchema()
+  const p = getPool()
+  if (!p) return res.status(500).json({ error: 'db_not_configured' })
+  const user = requireAuth(req, res)
+  if (!user) return
+
+  const postId = String(req.params.id)
+  const owner = await p.query(`SELECT user_id FROM posts WHERE id = $1 LIMIT 1`, [postId])
+  if (!owner.rowCount) return res.status(404).json({ error: 'not_found' })
+  if (String(owner.rows[0].user_id) !== user.id) return res.status(403).json({ error: 'forbidden' })
+
+  await p.query(`DELETE FROM posts WHERE id = $1`, [postId])
+  res.json({ ok: true })
+})
+
 app.post('/api/posts/:id/like', async (req, res) => {
   await ensureSchema()
   const p = getPool()
