@@ -46,13 +46,14 @@ function PostCard({
   onAddComment: (postId: string, text: string) => void
   onShare: (postId: string) => void
   onTagClick: (tag: string) => void
-  onEdit: (postId: string, next: { title: string; tags: string[] }) => Promise<void>
+  onEdit: (postId: string, next: { title: string; description: string; tags: string[] }) => Promise<void>
   onDelete: (postId: string) => Promise<void>
 }) {
   const [commentsOpen, setCommentsOpen] = useState(false)
   const [draft, setDraft] = useState('')
   const [editing, setEditing] = useState(false)
   const [editTitle, setEditTitle] = useState(post.title)
+  const [editDescription, setEditDescription] = useState(post.description)
   const [editTags, setEditTags] = useState(post.tags.map((t) => `#${t}`).join(' '))
   const [savingEdit, setSavingEdit] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -78,10 +79,11 @@ function PostCard({
   async function saveEdit() {
     const title = editTitle.trim()
     if (!title) return
+    const description = editDescription.trim().slice(0, 500)
     const tags = parseTags(editTags)
     setSavingEdit(true)
     try {
-      await onEdit(post.id, { title, tags })
+      await onEdit(post.id, { title, description, tags })
       setEditing(false)
     } finally {
       setSavingEdit(false)
@@ -126,6 +128,7 @@ function PostCard({
               className="button secondary"
               onClick={() => {
                 setEditTitle(post.title)
+                setEditDescription(post.description)
                 setEditTags(post.tags.map((t) => `#${t}`).join(' '))
                 setEditing(true)
               }}
@@ -227,8 +230,8 @@ function PostCard({
       ) : null}
 
       {editing ? (
-        <div className="modal-overlay" role="dialog" aria-modal="true">
-          <div className="modal" style={{ maxWidth: 720 }}>
+        <div className="modal-overlay" role="dialog" aria-modal="true" onClick={() => setEditing(false)}>
+          <div className="modal" style={{ maxWidth: 720 }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <div style={{ fontWeight: 900 }}>Editar publicación</div>
               <button className="button secondary" type="button" onClick={() => setEditing(false)} style={{ padding: '8px 12px' }}>
@@ -237,6 +240,13 @@ function PostCard({
             </div>
             <div style={{ padding: 14, display: 'grid', gap: 10 }}>
               <input className="input" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} placeholder="Título" />
+              <textarea
+                className="input textarea"
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value.slice(0, 500))}
+                placeholder="Descripción (opcional)"
+                style={{ height: 120 }}
+              />
               <input className="input" value={editTags} onChange={(e) => setEditTags(e.target.value)} placeholder="#tags (ej: #anime #digital)" />
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
                 <button className="button secondary" type="button" onClick={() => setEditing(false)} disabled={savingEdit}>

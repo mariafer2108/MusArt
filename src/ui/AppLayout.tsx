@@ -33,7 +33,7 @@ export type AppOutletContext = {
   addComment: (postId: string, text: string) => void
   sharePost: (postId: string) => Promise<void>
   addPost: (input: { title: string; description: string; tags: string[]; mediaUrl: string; mediaType: 'image' | 'video' }) => Promise<void>
-  updatePost: (postId: string, input: { title: string; tags: string[] }) => Promise<void>
+  updatePost: (postId: string, input: { title: string; description: string; tags: string[] }) => Promise<void>
   deletePost: (postId: string) => Promise<void>
   token: string | null
   setToken: (token: string | null) => void
@@ -226,7 +226,7 @@ function AppLayout() {
     setPosts((prev) => [r.post, ...prev])
   }
 
-  async function updatePost(postId: string, input: { title: string; tags: string[] }) {
+  async function updatePost(postId: string, input: { title: string; description: string; tags: string[] }) {
     const r = await api<{ post: Post }>(`/api/posts/${encodeURIComponent(postId)}`, { method: 'PATCH', body: JSON.stringify(input) })
     setPosts((prev) => prev.map((p) => (p.id === postId ? r.post : p)))
   }

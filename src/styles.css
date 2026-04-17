@@ -462,6 +462,15 @@ body {
   padding: 18px;
   z-index: 50;
 }
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(12, 8, 26, 0.55);
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  z-index: 50;
+}
 .modal {
   width: min(980px, 100%);
   max-height: min(820px, 100%);

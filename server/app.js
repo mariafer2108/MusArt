@@ -675,15 +675,17 @@ app.patch('/api/posts/:id', async (req, res) => {
 
   const postId = String(req.params.id)
   const title = String(req.body?.title ?? '').trim()
+  const description = String(req.body?.description ?? '').trim()
   const tags = normalizeTags(req.body?.tags)
 
   if (title.length < 1 || title.length > 80) return res.status(400).json({ error: 'invalid_title' })
+  if (description.length > 500) return res.status(400).json({ error: 'invalid_description' })
 
   const owner = await p.query(`SELECT user_id FROM posts WHERE id = $1 LIMIT 1`, [postId])
   if (!owner.rowCount) return res.status(404).json({ error: 'not_found' })
   if (String(owner.rows[0].user_id) !== user.id) return res.status(403).json({ error: 'forbidden' })
 
-  await p.query(`UPDATE posts SET title = $2, tags = $3 WHERE id = $1`, [postId, title, JSON.stringify(tags)])
+  await p.query(`UPDATE posts SET title = $2, description = $3, tags = $4 WHERE id = $1`, [postId, title, description, JSON.stringify(tags)])
 
   const postResult = await p.query(
     `
