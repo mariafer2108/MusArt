@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useOutletContext, useSearchParams } from 'react-router-dom'
 import type { AppOutletContext } from '../ui/AppLayout'
+import { upload } from '@vercel/blob/client'
 
 type Conversation = {
   id: string
@@ -15,6 +16,7 @@ type Message = {
   sender: string
   senderAvatarUrl: string | null
   text: string
+  imageUrl: string | null
   createdAt: string
 }
 
@@ -41,6 +43,7 @@ function Messages() {
   const [messages, setMessages] = useState<Message[]>([])
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [draft, setDraft] = useState('')
+  const [imageDraftUrl, setImageDraftUrl] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
 
   const bottomRef = useRef<HTMLDivElement | null>(null)
@@ -104,6 +107,28 @@ function Messages() {
     if (!q) return conversations
     return conversations.filter((c) => c.otherUsername.toLowerCase().includes(q) || c.lastText.toLowerCase().includes(q))
   }, [conversations, search])
+
+  async function sendMessage() {
+    if (!selectedId || !token) return
+    const text = draft.trim()
+    if (!text && !imageDraftUrl) return
+    setSending(true)
+    try {
+      const r = await fetch(`/api/conversations/${encodeURIComponent(selectedId)}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ text, imageUrl: imageDraftUrl })
+      })
+      const d = await r.json().catch(() => null)
+      if (!r.ok) throw new Error(d?.error ?? 'request_failed')
+      setDraft('')
+      setImageDraftUrl(null)
+      await fetchMessages(selectedId)
+      await fetchConversations()
+    } finally {
+      setSending(false)
+    }
+  }
 
   return (
     <div className="split">
@@ -185,6 +210,13 @@ function Messages() {
                         {mine ? 'Tú' : m.sender} · {formatTimeShort(m.createdAt)}
                       </div>
                       <div style={{ color: 'var(--text)', fontWeight: 650 }}>{m.text}</div>
+                      {m.imageUrl ? (
+                        <img
+                          src={m.imageUrl}
+                          alt="Adjunto"
+                          style={{ marginTop: 8, width: '100%', maxWidth: 380, borderRadius: 12, display: 'block' }}
+                        />
+                      ) : null}
                     </div>
                   </div>
                 )
@@ -201,51 +233,45 @@ function Messages() {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault()
-                    if (!draft.trim()) return
-                    if (!selectedId || !token) return
-                    setSending(true)
-                    fetch(`/api/conversations/${encodeURIComponent(selectedId)}/messages`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                      body: JSON.stringify({ text: draft.trim() })
-                    })
-                      .then(async (r) => {
-                        const d = await r.json().catch(() => null)
-                        if (!r.ok) throw new Error(d?.error ?? 'request_failed')
-                        setDraft('')
-                        await fetchMessages(selectedId)
-                        await fetchConversations()
-                      })
-                      .finally(() => setSending(false))
+                    sendMessage()
                   }
+                }}
+              />
+              <input
+                className="input"
+                type="file"
+                accept="image/*"
+                style={{ maxWidth: 170 }}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0]
+                  if (!file || !token) return
+                  const ext = (file.name.split('.').pop() || '').toLowerCase()
+                  const safeExt = ext && ext.length <= 8 ? ext : 'jpg'
+                  const blob = await upload(`messages/${Date.now()}-${Math.random().toString(16).slice(2)}.${safeExt}`, file, {
+                    access: 'public',
+                    handleUploadUrl: '/api/blob/upload',
+                    headers: { Authorization: `Bearer ${token}` }
+                  })
+                  setImageDraftUrl(blob.url)
                 }}
               />
               <button
                 className="button"
                 type="button"
-                disabled={sending || !draft.trim()}
-                onClick={async () => {
-                  if (!selectedId || !token) return
-                  setSending(true)
-                  try {
-                    const r = await fetch(`/api/conversations/${encodeURIComponent(selectedId)}/messages`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                      body: JSON.stringify({ text: draft.trim() })
-                    })
-                    const d = await r.json().catch(() => null)
-                    if (!r.ok) throw new Error(d?.error ?? 'request_failed')
-                    setDraft('')
-                    await fetchMessages(selectedId)
-                    await fetchConversations()
-                  } finally {
-                    setSending(false)
-                  }
-                }}
+                disabled={sending || (!draft.trim() && !imageDraftUrl)}
+                onClick={sendMessage}
               >
                 Enviar
               </button>
             </div>
+            {imageDraftUrl ? (
+              <div style={{ padding: '0 14px 14px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <img src={imageDraftUrl} alt="Imagen a enviar" style={{ width: 90, height: 90, objectFit: 'cover', borderRadius: 12 }} />
+                <button className="button secondary" type="button" onClick={() => setImageDraftUrl(null)}>
+                  Quitar imagen
+                </button>
+              </div>
+            ) : null}
           </>
         ) : (
           <div style={{ display: 'grid', placeItems: 'center', color: 'var(--muted)', minHeight: 520 }}>

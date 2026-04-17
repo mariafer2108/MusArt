@@ -131,9 +131,11 @@ async function ensureSchema() {
       conversation_id uuid NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
       sender_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       text text NOT NULL,
+      image_url text,
       created_at timestamptz NOT NULL DEFAULT now()
     );
   `)
+  await p.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS image_url text;`)
   await p.query(`CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON messages(conversation_id, created_at DESC);`)
 
   await p.query(`
@@ -1075,11 +1077,12 @@ app.get('/api/conversations', async (req, res) => {
         u.username as other_username,
         u.avatar_url as other_avatar_url,
         m.text as last_text,
+        m.image_url as last_image_url,
         m.created_at as last_created_at
       FROM conversations c
       JOIN users u ON u.id = CASE WHEN c.user1_id = $1::uuid THEN c.user2_id ELSE c.user1_id END
       LEFT JOIN LATERAL (
-        SELECT text, created_at
+        SELECT text, image_url, created_at
         FROM messages
         WHERE conversation_id = c.id
         ORDER BY created_at DESC
@@ -1096,7 +1099,7 @@ app.get('/api/conversations', async (req, res) => {
     id: String(r.id),
     otherUsername: String(r.other_username),
     otherAvatarUrl: r.other_avatar_url || null,
-    lastText: r.last_text ? String(r.last_text) : '',
+    lastText: r.last_text ? String(r.last_text) : (r.last_image_url ? '[Imagen]' : ''),
     lastAt: r.last_created_at || r.updated_at
   }))
   res.json({ conversations })
@@ -1145,6 +1148,7 @@ app.get('/api/conversations/:id/messages', async (req, res) => {
   const messagesResult = await db.query(
     `
       SELECT m.id, m.text, m.created_at, u.username as sender, u.avatar_url as sender_avatar_url
+      , m.image_url
       FROM messages m
       JOIN users u ON u.id = m.sender_id
       WHERE m.conversation_id = $1
@@ -1157,6 +1161,7 @@ app.get('/api/conversations/:id/messages', async (req, res) => {
     .map((m) => ({
       id: String(m.id),
       text: String(m.text),
+      imageUrl: m.image_url ? String(m.image_url) : null,
       createdAt: m.created_at,
       sender: String(m.sender),
       senderAvatarUrl: m.sender_avatar_url || null
@@ -1174,7 +1179,8 @@ app.post('/api/conversations/:id/messages', async (req, res) => {
 
   const conversationId = String(req.params.id)
   const text = String(req.body?.text ?? '').trim().slice(0, 2000)
-  if (!text) return res.status(400).json({ error: 'missing_text' })
+  const imageUrl = String(req.body?.imageUrl ?? '').trim().slice(0, 2000)
+  if (!text && !imageUrl) return res.status(400).json({ error: 'missing_message_content' })
 
   const conv = await db.query(`SELECT user1_id, user2_id FROM conversations WHERE id = $1 LIMIT 1`, [conversationId])
   if (!conv.rowCount) return res.status(404).json({ error: 'not_found' })
@@ -1184,11 +1190,11 @@ app.post('/api/conversations/:id/messages', async (req, res) => {
 
   const id = crypto.randomUUID()
   const created = await db.query(
-    `INSERT INTO messages (id, conversation_id, sender_id, text) VALUES ($1, $2, $3, $4) RETURNING created_at`,
-    [id, conversationId, user.id, text]
+    `INSERT INTO messages (id, conversation_id, sender_id, text, image_url) VALUES ($1, $2, $3, $4, $5) RETURNING created_at`,
+    [id, conversationId, user.id, text, imageUrl || null]
   )
   await db.query(`UPDATE conversations SET updated_at = now() WHERE id = $1`, [conversationId])
-  res.json({ message: { id, sender: user.username, text, createdAt: created.rows[0].created_at } })
+  res.json({ message: { id, sender: user.username, text, imageUrl: imageUrl || null, createdAt: created.rows[0].created_at } })
 })
 
 export default app
