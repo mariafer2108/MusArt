@@ -529,34 +529,43 @@ body {
     left: 0;
     right: 0;
     bottom: 0;
-    height: 74px;
-    padding: 10px 10px 14px 10px;
+    height: 78px;
+    padding: 10px 10px calc(14px + env(safe-area-inset-bottom)) 10px;
     border-top-left-radius: 18px;
     border-top-right-radius: 18px;
     z-index: 60;
+    box-shadow: 0 -14px 30px rgba(52, 29, 99, 0.18);
+    backdrop-filter: blur(10px);
   }
   .sidebar-header {
     display: none;
   }
   .sidebar nav {
     display: flex !important;
-    gap: 8px !important;
+    gap: 10px !important;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 2px;
   }
+  .sidebar nav::-webkit-scrollbar { display: none; }
   .sidebar nav button.side-link {
     display: none;
   }
   .side-link {
-    padding: 10px 10px;
+    padding: 10px 12px;
     font-size: 13px;
     border-radius: 999px;
     text-align: center;
-    flex: 1 1 0;
+    flex: 0 0 auto;
+    min-width: 92px;
+    white-space: nowrap;
   }
   .content {
     padding: 14px;
-    padding-bottom: 110px;
+    padding-bottom: calc(110px + env(safe-area-inset-bottom));
   }
   .topbar {
     height: 72px;
