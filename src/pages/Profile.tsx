@@ -12,6 +12,7 @@ function Profile() {
   const [tab, setTab] = useState<Tab>('portafolio')
   const [openPostId, setOpenPostId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
+  const [usernameDraft, setUsernameDraft] = useState(meUsername ?? '')
   const [bioDraft, setBioDraft] = useState(meBio)
   const [avatarDraftUrl, setAvatarDraftUrl] = useState<string | null>(meAvatarUrl)
   const [savingProfile, setSavingProfile] = useState(false)
@@ -34,9 +35,10 @@ function Profile() {
   const openPost = useMemo(() => (openPostId ? posts.find((p) => p.id === openPostId) ?? null : null), [openPostId, posts])
 
   useEffect(() => {
+    setUsernameDraft(meUsername ?? '')
     setBioDraft(meBio)
     setAvatarDraftUrl(meAvatarUrl)
-  }, [meBio, meAvatarUrl])
+  }, [meBio, meAvatarUrl, meUsername])
 
   function submitComment() {
     if (!openPost) return
@@ -70,6 +72,12 @@ function Profile() {
           </div>
           {isMe ? (
             <div style={{ display: 'grid', gap: 8, width: 'min(420px, 100%)' }}>
+              <input
+                className="input"
+                placeholder="Tu usuario (3–20, letras/números/_)"
+                value={usernameDraft}
+                onChange={(e) => setUsernameDraft(e.target.value)}
+              />
               <textarea
                 className="input textarea"
                 placeholder="Describe tu perfil..."
@@ -103,7 +111,8 @@ function Profile() {
                   onClick={async () => {
                     setSavingProfile(true)
                     try {
-                      await saveMyProfile({ bio: bioDraft.trim(), avatarUrl: avatarDraftUrl })
+                      const nextUsername = usernameDraft.trim()
+                      await saveMyProfile({ username: nextUsername || undefined, bio: bioDraft.trim(), avatarUrl: avatarDraftUrl })
                     } finally {
                       setSavingProfile(false)
                     }

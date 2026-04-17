@@ -373,8 +373,32 @@ app.patch('/api/me/profile', async (req, res) => {
   const bio = String(req.body?.bio ?? '').trim().slice(0, 220)
   const avatarUrlRaw = String(req.body?.avatarUrl ?? '').trim()
   const avatarUrl = avatarUrlRaw ? avatarUrlRaw.slice(0, 2000) : null
-  await db.query(`UPDATE users SET bio = $2, avatar_url = $3 WHERE id = $1`, [user.id, bio, avatarUrl])
-  res.json({ user: { id: user.id, username: user.username, bio, avatarUrl } })
+
+  const usernameRaw = req.body?.username
+  const nextUsername = typeof usernameRaw === 'string' ? usernameRaw.trim() : null
+  if (nextUsername && (!/^[A-Za-z0-9_]{3,20}$/.test(nextUsername))) {
+    return res.status(400).json({ error: 'invalid_username' })
+  }
+
+  await db.query('BEGIN')
+  try {
+    if (nextUsername) {
+      await db.query(`UPDATE users SET username = $2, bio = $3, avatar_url = $4 WHERE id = $1`, [user.id, nextUsername, bio, avatarUrl])
+    } else {
+      await db.query(`UPDATE users SET bio = $2, avatar_url = $3 WHERE id = $1`, [user.id, bio, avatarUrl])
+    }
+    await db.query('COMMIT')
+  } catch (e) {
+    await db.query('ROLLBACK')
+    if (String(e?.code || '') === '23505') return res.status(409).json({ error: 'user_exists' })
+    return res.status(500).json({ error: 'update_failed' })
+  }
+
+  const meResult = await db.query(`SELECT username, avatar_url, bio FROM users WHERE id = $1 LIMIT 1`, [user.id])
+  const row = meResult.rows[0]
+  const username = String(row?.username || user.username)
+  const token = jwt.sign({ id: user.id, username }, JWT_SECRET, { expiresIn: '30d' })
+  res.json({ token, user: { id: user.id, username, bio: String(row?.bio || ''), avatarUrl: row?.avatar_url || null } })
 })
 
 app.get('/api/me/interests', async (req, res) => {

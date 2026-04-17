@@ -37,7 +37,7 @@ export type AppOutletContext = {
   meUsername: string | null
   meBio: string
   meAvatarUrl: string | null
-  saveMyProfile: (input: { bio: string; avatarUrl: string | null }) => Promise<void>
+  saveMyProfile: (input: { username?: string; bio: string; avatarUrl: string | null }) => Promise<void>
 }
 
 function decodeJwtPayload(token: string): unknown {
@@ -203,11 +203,12 @@ function AppLayout() {
     setPosts((prev) => prev.map((p) => (p.id === postId ? r.post : p)))
   }
 
-  async function saveMyProfile(input: { bio: string; avatarUrl: string | null }) {
-    const r = await api<{ user: { bio?: string; avatarUrl?: string | null } }>('/api/me/profile', {
+  async function saveMyProfile(input: { username?: string; bio: string; avatarUrl: string | null }) {
+    const r = await api<{ token?: string; user: { bio?: string; avatarUrl?: string | null } }>('/api/me/profile', {
       method: 'PATCH',
       body: JSON.stringify(input)
     })
+    if (r.token) setToken(String(r.token))
     setMeBio(String(r.user?.bio ?? ''))
     setMeAvatarUrl(r.user?.avatarUrl ?? null)
   }
