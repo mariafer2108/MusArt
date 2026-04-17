@@ -39,6 +39,10 @@ export type AppOutletContext = {
   meBio: string
   meAvatarUrl: string | null
   saveMyProfile: (input: { username?: string; bio: string; avatarUrl: string | null }) => Promise<void>
+  meAcceptsCommissions: boolean
+  meCommissionCategories: string[]
+  meCommissionPriceInfo: string
+  saveMyCommissions: (input: { acceptsCommissions: boolean; categories: string[]; priceInfo: string }) => Promise<void>
 }
 
 function decodeJwtPayload(token: string): unknown {
@@ -58,6 +62,9 @@ function AppLayout() {
   const [token, setTokenState] = useState<string | null>(() => localStorage.getItem('musart_token'))
   const [meBio, setMeBio] = useState('')
   const [meAvatarUrl, setMeAvatarUrl] = useState<string | null>(null)
+  const [meAcceptsCommissions, setMeAcceptsCommissions] = useState(false)
+  const [meCommissionCategories, setMeCommissionCategories] = useState<string[]>([])
+  const [meCommissionPriceInfo, setMeCommissionPriceInfo] = useState('')
 
   const meUsername = useMemo(() => {
     if (!token) return null
@@ -114,18 +121,36 @@ function AppLayout() {
       setFollowing(new Set())
       setMeBio('')
       setMeAvatarUrl(null)
+      setMeAcceptsCommissions(false)
+      setMeCommissionCategories([])
+      setMeCommissionPriceInfo('')
       return
     }
-    api<{ following: string[]; user?: { bio?: string; avatarUrl?: string | null } }>('/api/me')
+    api<{
+      following: string[]
+      user?: {
+        bio?: string
+        avatarUrl?: string | null
+        acceptsCommissions?: boolean
+        commissionCategories?: string[]
+        commissionPriceInfo?: string
+      }
+    }>('/api/me')
       .then((d) => {
         setFollowing(new Set(d.following))
         setMeBio(String(d.user?.bio ?? ''))
         setMeAvatarUrl(d.user?.avatarUrl ?? null)
+        setMeAcceptsCommissions(Boolean(d.user?.acceptsCommissions))
+        setMeCommissionCategories(Array.isArray(d.user?.commissionCategories) ? d.user!.commissionCategories! : [])
+        setMeCommissionPriceInfo(String(d.user?.commissionPriceInfo ?? ''))
       })
       .catch(() => {
         setFollowing(new Set())
         setMeBio('')
         setMeAvatarUrl(null)
+        setMeAcceptsCommissions(false)
+        setMeCommissionCategories([])
+        setMeCommissionPriceInfo('')
       })
   }, [token])
 
@@ -227,6 +252,16 @@ function AppLayout() {
     }
   }
 
+  async function saveMyCommissions(input: { acceptsCommissions: boolean; categories: string[]; priceInfo: string }) {
+    const r = await api<{ ok: true; acceptsCommissions: boolean; categories: string[]; priceInfo: string }>('/api/me/commissions', {
+      method: 'PATCH',
+      body: JSON.stringify(input)
+    })
+    setMeAcceptsCommissions(Boolean(r.acceptsCommissions))
+    setMeCommissionCategories(Array.isArray(r.categories) ? r.categories : [])
+    setMeCommissionPriceInfo(String(r.priceInfo || ''))
+  }
+
   return (
     <div className="app-shell">
       <div className="app-frame">
@@ -295,7 +330,11 @@ function AppLayout() {
                     meUsername,
                     meBio,
                     meAvatarUrl,
-                    saveMyProfile
+                    saveMyProfile,
+                    meAcceptsCommissions,
+                    meCommissionCategories,
+                    meCommissionPriceInfo,
+                    saveMyCommissions
                   } satisfies AppOutletContext
                 }
               />
