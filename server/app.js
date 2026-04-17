@@ -149,6 +149,21 @@ async function ensureSchema() {
   `)
   await p.query(`CREATE INDEX IF NOT EXISTS idx_commission_requests_artist ON commission_requests(artist_id, created_at DESC);`)
   await p.query(`CREATE INDEX IF NOT EXISTS idx_commission_requests_requester ON commission_requests(requester_id, created_at DESC);`)
+
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS commission_products (
+      id uuid PRIMARY KEY,
+      user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      title text NOT NULL,
+      image_url text NOT NULL,
+      price_cents int NOT NULL,
+      currency text NOT NULL DEFAULT 'USD',
+      description text NOT NULL DEFAULT '',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+  `)
+  await p.query(`CREATE INDEX IF NOT EXISTS idx_commission_products_user ON commission_products(user_id, created_at DESC);`)
 }
 
 function getAuthUser(req) {
@@ -828,6 +843,136 @@ app.patch('/api/me/commissions', async (req, res) => {
     [user.id, acceptsCommissions, JSON.stringify(categories), priceInfo]
   )
   res.json({ ok: true, acceptsCommissions, categories, priceInfo })
+})
+
+app.get('/api/me/commission-products', async (req, res) => {
+  await ensureSchema()
+  const db = getPool()
+  if (!db) return res.status(500).json({ error: 'db_not_configured' })
+  const user = requireAuth(req, res)
+  if (!user) return
+
+  const result = await db.query(
+    `SELECT id, title, image_url, price_cents, currency, description, created_at FROM commission_products WHERE user_id = $1 ORDER BY created_at DESC`,
+    [user.id]
+  )
+  const products = result.rows.map((r) => ({
+    id: String(r.id),
+    title: String(r.title),
+    imageUrl: String(r.image_url),
+    priceCents: Number(r.price_cents),
+    currency: String(r.currency || 'USD'),
+    description: String(r.description || ''),
+    createdAt: r.created_at
+  }))
+  res.json({ products })
+})
+
+app.post('/api/me/commission-products', async (req, res) => {
+  await ensureSchema()
+  const db = getPool()
+  if (!db) return res.status(500).json({ error: 'db_not_configured' })
+  const user = requireAuth(req, res)
+  if (!user) return
+
+  const title = String(req.body?.title ?? '').trim().slice(0, 80)
+  const imageUrl = String(req.body?.imageUrl ?? '').trim().slice(0, 2000)
+  const priceCents = Number(req.body?.priceCents ?? NaN)
+  const currency = String(req.body?.currency ?? 'USD').trim().toUpperCase().slice(0, 3)
+  const description = String(req.body?.description ?? '').trim().slice(0, 220)
+  if (!title) return res.status(400).json({ error: 'missing_title' })
+  if (!imageUrl) return res.status(400).json({ error: 'missing_image' })
+  if (!Number.isFinite(priceCents) || priceCents < 0) return res.status(400).json({ error: 'invalid_price' })
+  if (!currency || currency.length < 2) return res.status(400).json({ error: 'invalid_currency' })
+
+  const id = crypto.randomUUID()
+  const inserted = await db.query(
+    `INSERT INTO commission_products (id, user_id, title, image_url, price_cents, currency, description) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING created_at`,
+    [id, user.id, title, imageUrl, Math.round(priceCents), currency, description]
+  )
+  res.json({ product: { id, title, imageUrl, priceCents: Math.round(priceCents), currency, description, createdAt: inserted.rows[0].created_at } })
+})
+
+app.patch('/api/me/commission-products/:id', async (req, res) => {
+  await ensureSchema()
+  const db = getPool()
+  if (!db) return res.status(500).json({ error: 'db_not_configured' })
+  const user = requireAuth(req, res)
+  if (!user) return
+
+  const id = String(req.params.id)
+  const title = String(req.body?.title ?? '').trim().slice(0, 80)
+  const imageUrl = String(req.body?.imageUrl ?? '').trim().slice(0, 2000)
+  const priceCents = Number(req.body?.priceCents ?? NaN)
+  const currency = String(req.body?.currency ?? 'USD').trim().toUpperCase().slice(0, 3)
+  const description = String(req.body?.description ?? '').trim().slice(0, 220)
+  if (!title) return res.status(400).json({ error: 'missing_title' })
+  if (!imageUrl) return res.status(400).json({ error: 'missing_image' })
+  if (!Number.isFinite(priceCents) || priceCents < 0) return res.status(400).json({ error: 'invalid_price' })
+  if (!currency || currency.length < 2) return res.status(400).json({ error: 'invalid_currency' })
+
+  const owner = await db.query(`SELECT user_id FROM commission_products WHERE id = $1 LIMIT 1`, [id])
+  if (!owner.rowCount) return res.status(404).json({ error: 'not_found' })
+  if (String(owner.rows[0].user_id) !== user.id) return res.status(403).json({ error: 'forbidden' })
+
+  await db.query(
+    `UPDATE commission_products SET title = $2, image_url = $3, price_cents = $4, currency = $5, description = $6, updated_at = now() WHERE id = $1`,
+    [id, title, imageUrl, Math.round(priceCents), currency, description]
+  )
+  res.json({ ok: true })
+})
+
+app.delete('/api/me/commission-products/:id', async (req, res) => {
+  await ensureSchema()
+  const db = getPool()
+  if (!db) return res.status(500).json({ error: 'db_not_configured' })
+  const user = requireAuth(req, res)
+  if (!user) return
+
+  const id = String(req.params.id)
+  const owner = await db.query(`SELECT user_id FROM commission_products WHERE id = $1 LIMIT 1`, [id])
+  if (!owner.rowCount) return res.status(404).json({ error: 'not_found' })
+  if (String(owner.rows[0].user_id) !== user.id) return res.status(403).json({ error: 'forbidden' })
+
+  await db.query(`DELETE FROM commission_products WHERE id = $1`, [id])
+  res.json({ ok: true })
+})
+
+app.get('/api/users/:username/commissions', async (req, res) => {
+  await ensureSchema()
+  const db = getPool()
+  if (!db) return res.status(500).json({ error: 'db_not_configured' })
+
+  const username = String(req.params.username || '').trim()
+  if (!username) return res.status(400).json({ error: 'missing_username' })
+  const userResult = await db.query(
+    `SELECT id, username, avatar_url, bio, accepts_commissions, commission_categories, commission_price_info FROM users WHERE username = $1 LIMIT 1`,
+    [username]
+  )
+  if (!userResult.rowCount) return res.status(404).json({ error: 'not_found' })
+  const u = userResult.rows[0]
+
+  const productsResult = await db.query(
+    `SELECT id, title, image_url, price_cents, currency, description, created_at FROM commission_products WHERE user_id = $1 ORDER BY created_at DESC`,
+    [u.id]
+  )
+  const products = productsResult.rows.map((r) => ({
+    id: String(r.id),
+    title: String(r.title),
+    imageUrl: String(r.image_url),
+    priceCents: Number(r.price_cents),
+    currency: String(r.currency || 'USD'),
+    description: String(r.description || ''),
+    createdAt: r.created_at
+  }))
+
+  res.json({
+    user: { username: String(u.username), avatarUrl: u.avatar_url || null, bio: String(u.bio || '') },
+    acceptsCommissions: Boolean(u.accepts_commissions),
+    categories: safeJsonArrayText(u.commission_categories),
+    priceInfo: String(u.commission_price_info || ''),
+    products
+  })
 })
 
 app.get('/api/commissions/artists', async (req, res) => {

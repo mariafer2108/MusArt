@@ -45,6 +45,11 @@ export type AppOutletContext = {
   meCommissionCategories: string[]
   meCommissionPriceInfo: string
   saveMyCommissions: (input: { acceptsCommissions: boolean; categories: string[]; priceInfo: string }) => Promise<void>
+  meCommissionProducts: { id: string; title: string; imageUrl: string; priceCents: number; currency: string; description: string }[]
+  refreshMyCommissionProducts: () => Promise<void>
+  createCommissionProduct: (input: { title: string; imageUrl: string; priceCents: number; currency: string; description: string }) => Promise<void>
+  updateCommissionProduct: (id: string, input: { title: string; imageUrl: string; priceCents: number; currency: string; description: string }) => Promise<void>
+  deleteCommissionProduct: (id: string) => Promise<void>
 }
 
 function decodeJwtPayload(token: string): unknown {
@@ -67,6 +72,9 @@ function AppLayout() {
   const [meAcceptsCommissions, setMeAcceptsCommissions] = useState(false)
   const [meCommissionCategories, setMeCommissionCategories] = useState<string[]>([])
   const [meCommissionPriceInfo, setMeCommissionPriceInfo] = useState('')
+  const [meCommissionProducts, setMeCommissionProducts] = useState<
+    { id: string; title: string; imageUrl: string; priceCents: number; currency: string; description: string }[]
+  >([])
 
   const meUsername = useMemo(() => {
     if (!token) return null
@@ -126,6 +134,7 @@ function AppLayout() {
       setMeAcceptsCommissions(false)
       setMeCommissionCategories([])
       setMeCommissionPriceInfo('')
+      setMeCommissionProducts([])
       return
     }
     api<{
@@ -153,7 +162,20 @@ function AppLayout() {
         setMeAcceptsCommissions(false)
         setMeCommissionCategories([])
         setMeCommissionPriceInfo('')
+        setMeCommissionProducts([])
       })
+  }, [token])
+
+  async function refreshMyCommissionProducts() {
+    const r = await api<{ products: { id: string; title: string; imageUrl: string; priceCents: number; currency: string; description: string }[] }>(
+      '/api/me/commission-products'
+    )
+    setMeCommissionProducts(Array.isArray(r.products) ? r.products : [])
+  }
+
+  useEffect(() => {
+    if (!token) return
+    refreshMyCommissionProducts().catch(() => setMeCommissionProducts([]))
   }, [token])
 
   function toggleFollow(author: string) {
@@ -269,6 +291,27 @@ function AppLayout() {
     setMeCommissionPriceInfo(String(r.priceInfo || ''))
   }
 
+  async function createCommissionProduct(input: { title: string; imageUrl: string; priceCents: number; currency: string; description: string }) {
+    const r = await api<{ product: { id: string; title: string; imageUrl: string; priceCents: number; currency: string; description: string } }>(
+      '/api/me/commission-products',
+      { method: 'POST', body: JSON.stringify(input) }
+    )
+    setMeCommissionProducts((prev) => [r.product, ...prev])
+  }
+
+  async function updateCommissionProduct(
+    id: string,
+    input: { title: string; imageUrl: string; priceCents: number; currency: string; description: string }
+  ) {
+    await api<{ ok: true }>(`/api/me/commission-products/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) })
+    await refreshMyCommissionProducts()
+  }
+
+  async function deleteCommissionProduct(id: string) {
+    await api<{ ok: true }>(`/api/me/commission-products/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    setMeCommissionProducts((prev) => prev.filter((p) => p.id !== id))
+  }
+
   return (
     <div className="app-shell">
       <div className="app-frame">
@@ -346,7 +389,12 @@ function AppLayout() {
                     meAcceptsCommissions,
                     meCommissionCategories,
                     meCommissionPriceInfo,
-                    saveMyCommissions
+                    saveMyCommissions,
+                    meCommissionProducts,
+                    refreshMyCommissionProducts,
+                    createCommissionProduct,
+                    updateCommissionProduct,
+                    deleteCommissionProduct
                   } satisfies AppOutletContext
                 }
               />

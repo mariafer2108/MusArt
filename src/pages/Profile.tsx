@@ -1,14 +1,36 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useOutletContext } from 'react-router-dom'
+import { useNavigate, useOutletContext } from 'react-router-dom'
 import type { AppOutletContext } from '../ui/AppLayout'
 import AutoVideo from '../ui/AutoVideo'
 import { upload } from '@vercel/blob/client'
 
 type Tab = 'portafolio' | 'comisiones'
 
+function formatPrice(priceCents: number, currency: string) {
+  const value = (priceCents || 0) / 100
+  return `${value.toFixed(value % 1 ? 2 : 0)} ${currency}`
+}
+
 function Profile() {
-  const { posts, following, toggleFollow, toggleLike, addComment, sharePost, meUsername, meBio, meAvatarUrl, token, saveMyProfile } =
-    useOutletContext<AppOutletContext>()
+  const navigate = useNavigate()
+  const {
+    posts,
+    following,
+    toggleFollow,
+    toggleLike,
+    addComment,
+    sharePost,
+    meUsername,
+    meBio,
+    meAvatarUrl,
+    token,
+    saveMyProfile,
+    meCommissionProducts,
+    createCommissionProduct,
+    updateCommissionProduct,
+    deleteCommissionProduct,
+    refreshMyCommissionProducts
+  } = useOutletContext<AppOutletContext>()
   const [tab, setTab] = useState<Tab>('portafolio')
   const [openPostId, setOpenPostId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
@@ -17,6 +39,14 @@ function Profile() {
   const [avatarDraftUrl, setAvatarDraftUrl] = useState<string | null>(meAvatarUrl)
   const [savingProfile, setSavingProfile] = useState(false)
   const [editProfileOpen, setEditProfileOpen] = useState(false)
+  const [productModalOpen, setProductModalOpen] = useState(false)
+  const [editingProductId, setEditingProductId] = useState<string | null>(null)
+  const [productTitle, setProductTitle] = useState('')
+  const [productCurrency, setProductCurrency] = useState<'USD' | 'MXN'>('USD')
+  const [productPrice, setProductPrice] = useState('')
+  const [productDescription, setProductDescription] = useState('')
+  const [productImageUrl, setProductImageUrl] = useState<string>('')
+  const [savingProduct, setSavingProduct] = useState(false)
 
   const portfolio = useMemo(
     () => [
@@ -40,6 +70,40 @@ function Profile() {
     setBioDraft(meBio)
     setAvatarDraftUrl(meAvatarUrl)
   }, [meBio, meAvatarUrl, meUsername])
+
+  function openNewProduct() {
+    setEditingProductId(null)
+    setProductTitle('')
+    setProductCurrency('USD')
+    setProductPrice('')
+    setProductDescription('')
+    setProductImageUrl('')
+    setProductModalOpen(true)
+  }
+
+  function openEditProduct(id: string) {
+    const p = meCommissionProducts.find((x) => x.id === id)
+    if (!p) return
+    setEditingProductId(id)
+    setProductTitle(p.title)
+    setProductCurrency((p.currency === 'MXN' ? 'MXN' : 'USD') as 'USD' | 'MXN')
+    setProductPrice(String((p.priceCents / 100).toFixed(p.priceCents % 100 ? 2 : 0)))
+    setProductDescription(p.description || '')
+    setProductImageUrl(p.imageUrl)
+    setProductModalOpen(true)
+  }
+
+  async function uploadProductImage(file: File) {
+    if (!token) return
+    const ext = (file.name.split('.').pop() || '').toLowerCase()
+    const safeExt = ext && ext.length <= 8 ? ext : 'jpg'
+    const blob = await upload(`commission-products/${Date.now()}-${Math.random().toString(16).slice(2)}.${safeExt}`, file, {
+      access: 'public',
+      handleUploadUrl: '/api/blob/upload',
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    setProductImageUrl(blob.url)
+  }
 
   function submitComment() {
     if (!openPost) return
@@ -103,7 +167,7 @@ function Profile() {
               Comisiones
             </button>
           </div>
-          <button className="button ghost" type="button">Solicitar comisión</button>
+          <button className="button ghost" type="button" onClick={() => navigate('/app/comisiones')}>Comisiones</button>
         </div>
       </div>
 
@@ -209,42 +273,146 @@ function Profile() {
           )}
         </div>
       ) : (
-        <div className="split">
+        <div style={{ display: 'grid', gap: 16 }}>
           <div className="card" style={{ padding: 16 }}>
-            <div style={{ fontWeight: 900, marginBottom: 10 }}>Tabla de valores</div>
-            <div style={{ display: 'grid', gap: 10 }}>
-              <div className="card" style={{ padding: 12, background: '#f7f0ff' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-                  <span style={{ fontWeight: 900 }}>Chibi</span>
-                  <span style={{ fontWeight: 900, color: 'var(--primary-strong)' }}>$5 USD</span>
-                </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontWeight: 900, marginBottom: 4 }}>Productos y precios</div>
+                <div style={{ color: 'var(--muted)', fontWeight: 650 }}>Sube una imagen y define el precio de cada comisión</div>
               </div>
-              <div className="card" style={{ padding: 12, background: '#f7f0ff' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-                  <span style={{ fontWeight: 900 }}>Lineart</span>
-                  <span style={{ fontWeight: 900, color: 'var(--primary-strong)' }}>$8 USD</span>
-                </div>
-              </div>
-              <div className="card" style={{ padding: 12, background: '#f7f0ff' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-                  <span style={{ fontWeight: 900 }}>Full body</span>
-                  <span style={{ fontWeight: 900, color: 'var(--primary-strong)' }}>$30 USD</span>
-                </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button className="button secondary" type="button" onClick={() => refreshMyCommissionProducts()} disabled={!token}>
+                  Actualizar
+                </button>
+                <button className="button" type="button" onClick={openNewProduct} disabled={!token}>
+                  Agregar producto
+                </button>
               </div>
             </div>
           </div>
 
-          <div className="card" style={{ padding: 16 }}>
-            <div style={{ fontWeight: 900, marginBottom: 10 }}>Términos y solicitud</div>
-            <div style={{ color: 'var(--muted)', fontWeight: 600, marginBottom: 10 }}>
-              Envía referencias y detalles. Se confirma disponibilidad y tiempo de entrega al responder.
-            </div>
-            <textarea className="input textarea" placeholder="Escribe tu solicitud..." style={{ height: 160 }} />
-            <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
-              <button className="button" type="button">Enviar solicitud</button>
-              <button className="button secondary" type="button">Adjuntar referencias</button>
-            </div>
+          <div className="grid">
+            {meCommissionProducts.map((p) => (
+              <div key={p.id} className="card" style={{ padding: 12 }}>
+                <div style={{ height: 140, borderRadius: 14, overflow: 'hidden', background: '#ddd' }}>
+                  <img src={p.imageUrl} alt={p.title} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                </div>
+                <div style={{ display: 'grid', gap: 6, marginTop: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+                    <div style={{ fontWeight: 900, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
+                    <div className="pill">{formatPrice(p.priceCents, p.currency)}</div>
+                  </div>
+                  {p.description ? (
+                    <div style={{ color: 'var(--muted)', fontWeight: 650, fontSize: 12, whiteSpace: 'pre-wrap' }}>{p.description}</div>
+                  ) : null}
+                  <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
+                    <button className="button secondary" type="button" onClick={() => openEditProduct(p.id)}>
+                      Editar
+                    </button>
+                    <button
+                      className="button secondary"
+                      type="button"
+                      onClick={async () => {
+                        if (!confirm('¿Borrar este producto?')) return
+                        await deleteCommissionProduct(p.id)
+                      }}
+                    >
+                      Borrar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {meCommissionProducts.length === 0 ? (
+              <div className="card" style={{ padding: 16, color: 'var(--muted)', fontWeight: 700 }}>
+                Aún no tienes productos de comisiones. Agrega uno para mostrar tus precios.
+              </div>
+            ) : null}
           </div>
+
+          {productModalOpen ? (
+            <div className="modal-overlay" role="dialog" aria-modal="true" onClick={() => setProductModalOpen(false)}>
+              <div className="modal" style={{ maxWidth: 720 }} onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                  <div style={{ fontWeight: 900 }}>{editingProductId ? 'Editar producto' : 'Nuevo producto'}</div>
+                  <button className="button secondary" type="button" onClick={() => setProductModalOpen(false)} style={{ padding: '8px 12px' }}>
+                    Cerrar
+                  </button>
+                </div>
+                <div style={{ padding: 14, display: 'grid', gap: 10 }}>
+                  <div style={{ height: 180, borderRadius: 16, overflow: 'hidden', background: '#ddd' }}>
+                    {productImageUrl ? (
+                      <img src={productImageUrl} alt="Producto" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                    ) : null}
+                  </div>
+                  <input className="input" type="file" accept="image/*" onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (!f) return
+                    uploadProductImage(f)
+                  }} />
+                  <input className="input" placeholder="Nombre del producto (ej: Chibi)" value={productTitle} onChange={(e) => setProductTitle(e.target.value)} />
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <select
+                      className="input"
+                      value={productCurrency}
+                      onChange={(e) => setProductCurrency(e.target.value === 'MXN' ? 'MXN' : 'USD')}
+                      style={{ maxWidth: 120 }}
+                    >
+                      <option value="USD">USD</option>
+                      <option value="MXN">MXN</option>
+                    </select>
+                    <input
+                      className="input"
+                      placeholder="Precio (ej: 15)"
+                      value={productPrice}
+                      onChange={(e) => setProductPrice(e.target.value)}
+                      inputMode="decimal"
+                    />
+                  </div>
+                  <textarea
+                    className="input textarea"
+                    placeholder="Descripción (opcional)"
+                    style={{ height: 120 }}
+                    value={productDescription}
+                    onChange={(e) => setProductDescription(e.target.value.slice(0, 220))}
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                    <button className="button secondary" type="button" onClick={() => setProductModalOpen(false)} disabled={savingProduct}>
+                      Cancelar
+                    </button>
+                    <button
+                      className="button"
+                      type="button"
+                      disabled={savingProduct || !productTitle.trim() || !productImageUrl || !productPrice.trim()}
+                      onClick={async () => {
+                        if (!token) return
+                        const price = Number(String(productPrice).replace(',', '.'))
+                        if (!Number.isFinite(price) || price < 0) return
+                        const priceCents = Math.round(price * 100)
+                        setSavingProduct(true)
+                        try {
+                          const input = {
+                            title: productTitle.trim().slice(0, 80),
+                            imageUrl: productImageUrl,
+                            priceCents,
+                            currency: productCurrency,
+                            description: productDescription.trim()
+                          }
+                          if (editingProductId) await updateCommissionProduct(editingProductId, input)
+                          else await createCommissionProduct(input)
+                          setProductModalOpen(false)
+                        } finally {
+                          setSavingProduct(false)
+                        }
+                      }}
+                    >
+                      Guardar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
 
