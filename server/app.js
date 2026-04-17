@@ -1035,6 +1035,10 @@ app.post('/api/commissions/requests', async (req, res) => {
   const artistUsername = String(req.body?.artistUsername ?? '').trim()
   const title = String(req.body?.title ?? '').trim().slice(0, 80)
   const details = String(req.body?.details ?? '').trim().slice(0, 2000)
+  const imageUrls = Array.isArray(req.body?.imageUrls) ? req.body.imageUrls.map((u) => String(u || '').trim()).filter(Boolean) : []
+  const safeImageUrls = imageUrls
+    .filter((u) => u.length <= 2000 && /^https?:\/\//.test(u))
+    .slice(0, 3)
   if (!artistUsername) return res.status(400).json({ error: 'missing_artist' })
   if (!title) return res.status(400).json({ error: 'missing_title' })
   if (!details) return res.status(400).json({ error: 'missing_details' })
@@ -1052,9 +1056,13 @@ app.post('/api/commissions/requests', async (req, res) => {
   )
   const messageId = crypto.randomUUID()
   await db.query(
-    `INSERT INTO messages (id, conversation_id, sender_id, text) VALUES ($1, $2, $3, $4)`,
-    [messageId, conversationId, user.id, `Solicitud de comisión: ${title}\n\n${details}`]
+    `INSERT INTO messages (id, conversation_id, sender_id, text, image_url) VALUES ($1, $2, $3, $4, $5)`,
+    [messageId, conversationId, user.id, `Solicitud de comisión: ${title}\n\n${details}`, safeImageUrls[0] || null]
   )
+  for (const url of safeImageUrls.slice(1)) {
+    const mid = crypto.randomUUID()
+    await db.query(`INSERT INTO messages (id, conversation_id, sender_id, text, image_url) VALUES ($1, $2, $3, $4, $5)`, [mid, conversationId, user.id, '', url])
+  }
   await db.query(`UPDATE conversations SET updated_at = now() WHERE id = $1`, [conversationId])
 
   res.json({ requestId, conversationId })

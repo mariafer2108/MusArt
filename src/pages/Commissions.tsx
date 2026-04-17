@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useOutletContext } from 'react-router-dom'
 import type { AppOutletContext } from '../ui/AppLayout'
+import { upload } from '@vercel/blob/client'
 
 type Artist = {
   username: string
@@ -41,6 +42,7 @@ function Commissions() {
   const [requestTitle, setRequestTitle] = useState('')
   const [requestDetails, setRequestDetails] = useState('')
   const [sendingRequest, setSendingRequest] = useState(false)
+  const [requestImageUrls, setRequestImageUrls] = useState<string[]>([])
 
   useEffect(() => {
     setAcceptsDraft(meAcceptsCommissions)
@@ -249,6 +251,60 @@ function Commissions() {
                 value={requestDetails}
                 onChange={(e) => setRequestDetails(e.target.value)}
               />
+              <div style={{ display: 'grid', gap: 10 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
+                  <div style={{ fontWeight: 900, color: 'var(--primary-strong)' }}>Imágenes (opcional)</div>
+                  <div style={{ color: 'var(--muted)', fontWeight: 800, fontSize: 12 }}>{requestImageUrls.length}/3</div>
+                </div>
+                <input
+                  className="input"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  disabled={!token || sendingRequest || requestImageUrls.length >= 3}
+                  onChange={async (e) => {
+                    const files = Array.from(e.target.files || [])
+                    if (!files.length || !token) return
+                    const remaining = Math.max(0, 3 - requestImageUrls.length)
+                    const toUpload = files.slice(0, remaining)
+                    try {
+                      const urls: string[] = []
+                      for (const f of toUpload) {
+                        const ext = (f.name.split('.').pop() || '').toLowerCase()
+                        const safeExt = ext && ext.length <= 8 ? ext : 'jpg'
+                        const blob = await upload(`commission-requests/${Date.now()}-${Math.random().toString(16).slice(2)}.${safeExt}`, f, {
+                          access: 'public',
+                          handleUploadUrl: '/api/blob/upload',
+                          headers: { Authorization: `Bearer ${token}` }
+                        })
+                        urls.push(blob.url)
+                      }
+                      setRequestImageUrls((prev) => [...prev, ...urls].slice(0, 3))
+                    } catch {
+                      setError('No se pudieron subir las imágenes.')
+                    } finally {
+                      e.target.value = ''
+                    }
+                  }}
+                />
+                {requestImageUrls.length ? (
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    {requestImageUrls.map((u) => (
+                      <div key={u} style={{ position: 'relative' }}>
+                        <img src={u} alt="Adjunto" style={{ width: 92, height: 92, borderRadius: 12, objectFit: 'cover', display: 'block' }} />
+                        <button
+                          type="button"
+                          className="button secondary"
+                          style={{ position: 'absolute', top: 6, right: 6, padding: '6px 10px', borderRadius: 999, fontSize: 12 }}
+                          onClick={() => setRequestImageUrls((prev) => prev.filter((x) => x !== u))}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
                 <button className="button secondary" type="button" onClick={() => setRequestOpen(false)} disabled={sendingRequest}>
                   Cancelar
@@ -267,12 +323,14 @@ function Commissions() {
                         body: JSON.stringify({
                           artistUsername: requestArtist.username,
                           title: requestTitle.trim(),
-                          details: requestDetails.trim()
+                          details: requestDetails.trim(),
+                          imageUrls: requestImageUrls
                         })
                       })
                       const d = await r.json().catch(() => null)
                       if (!r.ok) throw new Error(d?.error ?? 'request_failed')
                       setRequestOpen(false)
+                      setRequestImageUrls([])
                       navigate(`/app/mensajes?c=${encodeURIComponent(String(d.conversationId))}`)
                     } catch {
                       setError('No se pudo enviar la solicitud.')
