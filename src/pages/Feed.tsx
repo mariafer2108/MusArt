@@ -288,9 +288,6 @@ function Feed() {
           </button>
         </div>
       ) : null}
-      <div className="story-row">
-        {Array.from({ length: 10 }).map((_, i) => <div key={i} className="story"><div /></div>)}
-      </div>
       {filteredPosts.map((p) => (
         <PostCard
           key={p.id}
