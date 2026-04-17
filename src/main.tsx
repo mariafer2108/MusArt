@@ -12,6 +12,7 @@ import Commissions from './pages/Commissions'
 import Messages from './pages/Messages'
 import Profile from './pages/Profile'
 import Create from './pages/Create'
+import UserProfile from './pages/UserProfile'
 
 const router = createBrowserRouter([
   { path: '/', element: <Login /> },
@@ -26,6 +27,7 @@ const router = createBrowserRouter([
       { path: 'comisiones', element: <Commissions /> },
       { path: 'mensajes', element: <Messages /> },
       { path: 'perfil', element: <Profile /> },
+      { path: 'perfil/:username', element: <UserProfile /> },
       { path: 'crear', element: <Create /> }
     ]
   }

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useOutletContext } from 'react-router-dom'
+import { Link, useOutletContext } from 'react-router-dom'
 import type { AppOutletContext, Post } from '../ui/AppLayout'
 import AutoVideo from '../ui/AutoVideo'
 
@@ -30,6 +30,7 @@ function PostCard({
   post,
   isFollowing,
   canEdit,
+  meUsername,
   onToggleFollow,
   onToggleLike,
   onAddComment,
@@ -41,6 +42,7 @@ function PostCard({
   post: Post
   isFollowing: boolean
   canEdit: boolean
+  meUsername: string | null
   onToggleFollow: (author: string) => void
   onToggleLike: (postId: string) => void
   onAddComment: (postId: string, text: string) => void
@@ -57,6 +59,10 @@ function PostCard({
   const [editTags, setEditTags] = useState(post.tags.map((t) => `#${t}`).join(' '))
   const [savingEdit, setSavingEdit] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  function profilePath(username: string) {
+    return meUsername && username === meUsername ? '/app/perfil' : `/app/perfil/${encodeURIComponent(username)}`
+  }
 
   function submitComment() {
     const text = draft.trim()
@@ -103,9 +109,9 @@ function PostCard({
           )}
           <div style={{ minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
-              <div style={{ fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <Link to={profilePath(post.author)} className="user-link" style={{ fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {post.author}
-              </div>
+              </Link>
               <div style={{ color: 'var(--muted)', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' }}>
                 {formatTimeAgo(post.createdAt)}
               </div>
@@ -122,7 +128,7 @@ function PostCard({
           </div>
         </div>
         {canEdit ? (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', alignSelf: 'flex-start', marginTop: 2 }}>
             <button
               type="button"
               className="button secondary"
@@ -159,7 +165,7 @@ function PostCard({
             type="button"
             className={isFollowing ? 'button secondary' : 'button'}
             onClick={() => onToggleFollow(post.author)}
-            style={{ padding: '8px 12px', borderRadius: 999, fontSize: 12 }}
+            style={{ padding: '8px 12px', borderRadius: 999, fontSize: 12, alignSelf: 'flex-start', marginTop: 2 }}
           >
             {isFollowing ? 'Siguiendo' : 'Seguir'}
           </button>
@@ -219,7 +225,9 @@ function PostCard({
             post.previewComments.slice(0, 6).map((c) => (
               <div key={c.id} className="card" style={{ padding: 12, background: '#f7f0ff' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-                  <div style={{ fontWeight: 900 }}>{c.author}</div>
+                  <Link to={profilePath(c.author)} className="user-link" style={{ fontWeight: 900 }}>
+                    {c.author}
+                  </Link>
                     <div style={{ color: 'var(--muted)', fontWeight: 800, fontSize: 12 }}>{formatTimeAgo(c.createdAt)}</div>
                 </div>
                 <div style={{ color: 'var(--text)', marginTop: 4 }}>{c.text}</div>
@@ -289,6 +297,7 @@ function Feed() {
           post={p}
           isFollowing={following.has(p.author)}
           canEdit={Boolean(meUsername && p.author === meUsername)}
+          meUsername={meUsername}
           onToggleFollow={toggleFollow}
           onToggleLike={toggleLike}
           onAddComment={addComment}

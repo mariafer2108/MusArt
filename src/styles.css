@@ -193,6 +193,9 @@ body {
   background: rgba(255, 255, 255, 0.55);
   border: 1px solid rgba(52, 29, 99, 0.12);
 }
+.user-chip-button {
+  cursor: pointer;
+}
 .user-chip-avatar {
   width: 34px;
   height: 34px;
@@ -201,6 +204,13 @@ body {
   box-shadow: 0 10px 22px rgba(52, 29, 99, 0.12);
   object-fit: cover;
   display: block;
+}
+.user-link {
+  color: var(--primary-strong);
+  text-decoration: none;
+}
+.user-link:hover {
+  text-decoration: underline;
 }
 .user-chip-name {
   font-weight: 900;
@@ -387,7 +397,7 @@ body {
 }
 .post-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   margin-bottom: 10px;
 }

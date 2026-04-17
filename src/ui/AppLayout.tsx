@@ -310,14 +310,18 @@ function AppLayout() {
                 <div className="search">
                   <input className="input" placeholder="Descubre artistas..." />
                 </div>
-                <div className="user-chip">
+                <button
+                  type="button"
+                  className="user-chip user-chip-button"
+                  onClick={() => navigate(meUsername ? '/app/perfil' : '/app')}
+                >
                   {meAvatarUrl ? (
                     <img className="user-chip-avatar" src={meAvatarUrl} alt="Tu avatar" />
                   ) : (
                     <div className="user-chip-avatar" />
                   )}
                   <div className="user-chip-name">{meUsername || '—'}</div>
-                </div>
+                </button>
               </div>
             </div>
             <div className="content">
