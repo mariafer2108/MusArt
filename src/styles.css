@@ -522,7 +522,7 @@ body {
 
 @media (max-width: 900px) {
   .app-inner {
-    grid-template-columns: 1fr;
+    display: block;
   }
   .sidebar {
     position: fixed;
@@ -544,24 +544,23 @@ body {
     display: flex !important;
     gap: 10px !important;
     align-items: center;
-    justify-content: flex-start;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
+    justify-content: space-between;
+    overflow: hidden;
     padding-bottom: 2px;
   }
-  .sidebar nav::-webkit-scrollbar { display: none; }
   .sidebar nav button.side-link {
     display: none;
   }
   .side-link {
-    padding: 10px 12px;
-    font-size: 13px;
+    padding: 9px 10px;
+    font-size: 12px;
     border-radius: 999px;
     text-align: center;
-    flex: 0 0 auto;
-    min-width: 92px;
+    flex: 1 1 0;
+    min-width: 0;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .content {
     padding: 14px;
@@ -695,7 +694,7 @@ body {
   color: var(--primary-strong);
 }
 
-@media (max-width: 980px) {
+@media (max-width: 980px) and (min-width: 901px) {
   .login-inner { grid-template-columns: 1fr; }
   .login-hero { display: none; }
   .app-inner { grid-template-columns: 76px 1fr; }
