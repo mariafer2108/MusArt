@@ -3,21 +3,18 @@ import { useNavigate, useOutletContext } from 'react-router-dom'
 import type { AppOutletContext } from '../ui/AppLayout'
 import { upload } from '@vercel/blob/client'
 
-function extractTags(text: string) {
-  return Array.from(text.matchAll(/#([A-Za-z0-9_]+)/g))
-    .map((m) => m[1].toLowerCase())
-    .filter((t, i, arr) => arr.indexOf(t) === i)
-}
-
-function extractTitle(text: string) {
-  const line = text.split('\n')[0]?.trim() ?? ''
-  const cleaned = line.replace(/#[A-Za-z0-9_]+/g, '').trim()
-  return (cleaned || 'Nueva publicación').slice(0, 60)
+function normalizeTag(input: string) {
+  const trimmed = input.trim().replace(/^#/, '')
+  const cleaned = trimmed.replace(/[^A-Za-z0-9_]/g, '').toLowerCase()
+  return cleaned.slice(0, 24)
 }
 
 function Create() {
   const { addPost, token } = useOutletContext<AppOutletContext>()
   const navigate = useNavigate()
+  const [title, setTitle] = useState('')
+  const [tagInput, setTagInput] = useState('')
+  const [tags, setTags] = useState<string[]>([])
   const [text, setText] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -36,12 +33,16 @@ function Create() {
       navigate('/')
       return
     }
-    if (!file) return
+    if (!file) {
+      setError('Selecciona un archivo antes de publicar.')
+      return
+    }
     setSaving(true)
     setError(null)
     try {
-      const title = extractTitle(text)
-      const tags = extractTags(text)
+      const cleanTitle = title.trim()
+      if (!cleanTitle) throw new Error('Escribe un título.')
+      if (cleanTitle.length > 80) throw new Error('El título es demasiado largo.')
       const ext = (file.name.split('.').pop() || '').toLowerCase()
       const safeExt = ext && ext.length <= 8 ? ext : 'bin'
       const blob = await upload(`posts/${Date.now()}-${Math.random().toString(16).slice(2)}.${safeExt}`, file, {
@@ -51,7 +52,7 @@ function Create() {
         multipart: file.size > 100 * 1024 * 1024
       })
       const mediaType = file.type.startsWith('video/') ? 'video' : 'image'
-      await addPost({ title, tags, mediaUrl: blob.url, mediaType })
+      await addPost({ title: cleanTitle, tags, mediaUrl: blob.url, mediaType })
       navigate('/app')
     } catch (e: any) {
       if (String(e?.message || '') === 'unauthorized') {
@@ -69,17 +70,67 @@ function Create() {
     <div className="split">
       <div className="card" style={{ padding: 16 }}>
         <div style={{ fontWeight: 900, marginBottom: 10, fontSize: 18 }}>Crear publicación</div>
+        <input
+          className="input"
+          placeholder="Título"
+          value={title}
+          onChange={(e) => setTitle(e.target.value.slice(0, 80))}
+        />
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            className="input"
+            placeholder="Agregar tag (ej: anime)"
+            value={tagInput}
+            onChange={(e) => setTagInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter') return
+              e.preventDefault()
+              const next = normalizeTag(tagInput)
+              if (!next) return
+              setTags((prev) => (prev.includes(next) ? prev : [...prev, next].slice(0, 12)))
+              setTagInput('')
+            }}
+            style={{ maxWidth: 260 }}
+          />
+          <button
+            className="button secondary"
+            type="button"
+            onClick={() => {
+              const next = normalizeTag(tagInput)
+              if (!next) return
+              setTags((prev) => (prev.includes(next) ? prev : [...prev, next].slice(0, 12)))
+              setTagInput('')
+            }}
+            style={{ padding: '10px 14px' }}
+          >
+            Añadir tag
+          </button>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {tags.length ? (
+              tags.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  className="pill"
+                  onClick={() => setTags((prev) => prev.filter((x) => x !== t))}
+                  style={{ border: 'none', cursor: 'pointer' }}
+                  aria-label={`Quitar #${t}`}
+                >
+                  #{t} ×
+                </button>
+              ))
+            ) : (
+              <span className="pill">Tags: —</span>
+            )}
+          </div>
+        </div>
         <textarea
           className="input textarea"
-          placeholder="Comparte tu arte... (usa #tags para que te encuentren)"
+          placeholder="Escribe una descripción (opcional)"
           style={{ height: 140 }}
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-          <span className="pill">Título: {extractTitle(text)}</span>
-          <span className="pill">Tags: {extractTags(text).length ? `#${extractTags(text).join(' #')}` : '—'}</span>
-        </div>
         <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
           <button className="button" type="button" onClick={publish} disabled={!file || saving}>
             Publicar
