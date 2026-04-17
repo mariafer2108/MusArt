@@ -16,6 +16,7 @@ function Profile() {
   const [bioDraft, setBioDraft] = useState(meBio)
   const [avatarDraftUrl, setAvatarDraftUrl] = useState<string | null>(meAvatarUrl)
   const [savingProfile, setSavingProfile] = useState(false)
+  const [editProfileOpen, setEditProfileOpen] = useState(false)
 
   const portfolio = useMemo(
     () => [
@@ -71,57 +72,9 @@ function Profile() {
             </div>
           </div>
           {isMe ? (
-            <div style={{ display: 'grid', gap: 8, width: 'min(420px, 100%)' }}>
-              <input
-                className="input"
-                placeholder="Tu usuario (3–20, letras/números/_)"
-                value={usernameDraft}
-                onChange={(e) => setUsernameDraft(e.target.value)}
-              />
-              <textarea
-                className="input textarea"
-                placeholder="Describe tu perfil..."
-                style={{ height: 92 }}
-                value={bioDraft}
-                onChange={(e) => setBioDraft(e.target.value.slice(0, 220))}
-              />
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                <input
-                  className="input"
-                  type="file"
-                  accept="image/*"
-                  style={{ maxWidth: 220 }}
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0]
-                    if (!file || !token) return
-                    const ext = (file.name.split('.').pop() || '').toLowerCase()
-                    const safeExt = ext && ext.length <= 8 ? ext : 'jpg'
-                    const blob = await upload(`avatars/${Date.now()}-${Math.random().toString(16).slice(2)}.${safeExt}`, file, {
-                      access: 'public',
-                      handleUploadUrl: '/api/blob/upload',
-                      headers: { Authorization: `Bearer ${token}` }
-                    })
-                    setAvatarDraftUrl(blob.url)
-                  }}
-                />
-                <button
-                  className="button"
-                  type="button"
-                  disabled={savingProfile}
-                  onClick={async () => {
-                    setSavingProfile(true)
-                    try {
-                      const nextUsername = usernameDraft.trim()
-                      await saveMyProfile({ username: nextUsername || undefined, bio: bioDraft.trim(), avatarUrl: avatarDraftUrl })
-                    } finally {
-                      setSavingProfile(false)
-                    }
-                  }}
-                >
-                  Guardar perfil
-                </button>
-              </div>
-            </div>
+            <button className="button secondary" type="button" onClick={() => setEditProfileOpen(true)}>
+              Editar perfil
+            </button>
           ) : (
             <button className={following.has(author) ? 'button secondary' : 'button'} type="button" onClick={() => toggleFollow(author)}>
               {following.has(author) ? 'Siguiendo' : 'Seguir'}
@@ -153,6 +106,82 @@ function Profile() {
           <button className="button ghost" type="button">Solicitar comisión</button>
         </div>
       </div>
+
+      {editProfileOpen ? (
+        <div className="modal-overlay" role="dialog" aria-modal="true" onClick={() => setEditProfileOpen(false)}>
+          <div className="modal" style={{ maxWidth: 640 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div style={{ fontWeight: 900 }}>Editar perfil</div>
+              <button className="button secondary" type="button" onClick={() => setEditProfileOpen(false)} style={{ padding: '8px 12px' }}>
+                Cerrar
+              </button>
+            </div>
+            <div style={{ padding: 14, display: 'grid', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div className="story" style={{ overflow: 'hidden' }}>
+                  {avatarDraftUrl ? (
+                    <img src={avatarDraftUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 999 }} />
+                  ) : (
+                    <div />
+                  )}
+                </div>
+                <input
+                  className="input"
+                  type="file"
+                  accept="image/*"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0]
+                    if (!file || !token) return
+                    const ext = (file.name.split('.').pop() || '').toLowerCase()
+                    const safeExt = ext && ext.length <= 8 ? ext : 'jpg'
+                    const blob = await upload(`avatars/${Date.now()}-${Math.random().toString(16).slice(2)}.${safeExt}`, file, {
+                      access: 'public',
+                      handleUploadUrl: '/api/blob/upload',
+                      headers: { Authorization: `Bearer ${token}` }
+                    })
+                    setAvatarDraftUrl(blob.url)
+                  }}
+                />
+              </div>
+              <input
+                className="input"
+                placeholder="Tu usuario (3–20, letras/números/_)"
+                value={usernameDraft}
+                onChange={(e) => setUsernameDraft(e.target.value)}
+              />
+              <textarea
+                className="input textarea"
+                placeholder="Describe tu perfil..."
+                style={{ height: 120 }}
+                value={bioDraft}
+                onChange={(e) => setBioDraft(e.target.value.slice(0, 220))}
+              />
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                <button className="button secondary" type="button" onClick={() => setEditProfileOpen(false)} disabled={savingProfile}>
+                  Cancelar
+                </button>
+                <button
+                  className="button"
+                  type="button"
+                  disabled={savingProfile}
+                  onClick={async () => {
+                    setSavingProfile(true)
+                    try {
+                      const nextUsername = usernameDraft.trim()
+                      await saveMyProfile({ username: nextUsername || undefined, bio: bioDraft.trim(), avatarUrl: avatarDraftUrl })
+                      setEditProfileOpen(false)
+                    } finally {
+                      setSavingProfile(false)
+                    }
+                  }}
+                >
+                  Guardar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {tab === 'portafolio' ? (
         <div className="portfolio-grid">
