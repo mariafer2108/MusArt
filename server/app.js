@@ -485,6 +485,7 @@ app.get('/api/posts', async (req, res) => {
         p.shares_count,
         p.created_at,
         u.username as author,
+        u.avatar_url as author_avatar_url,
         (SELECT count(*)::int FROM likes l WHERE l.post_id = p.id) as likes_count,
         (SELECT count(*)::int FROM comments c WHERE c.post_id = p.id) as comments_count,
         CASE WHEN $1::uuid IS NULL THEN false
@@ -519,6 +520,7 @@ app.get('/api/posts', async (req, res) => {
   const posts = postsResult.rows.map((r) => ({
     id: r.id,
     author: r.author,
+    authorAvatarUrl: r.author_avatar_url || null,
     title: r.title,
     tags: JSON.parse(r.tags || '[]'),
     mediaUrl: r.media_url,
@@ -551,11 +553,14 @@ app.post('/api/posts', async (req, res) => {
     `INSERT INTO posts (id, user_id, title, tags, image_url, media_url, media_type) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, created_at`,
     [id, user.id, title, JSON.stringify(tags), mediaUrl, mediaUrl, mediaType]
   )
+  const avatarResult = await p.query(`SELECT avatar_url FROM users WHERE id = $1 LIMIT 1`, [user.id])
+  const authorAvatarUrl = avatarResult.rows[0]?.avatar_url ?? null
   const row = inserted.rows[0]
   res.json({
     post: {
       id: row.id,
       author: user.username,
+      authorAvatarUrl,
       title,
       tags,
       mediaUrl,
@@ -595,10 +600,12 @@ app.patch('/api/posts/:id', async (req, res) => {
         p.id,
         p.title,
         p.tags,
-        p.image_url,
+        COALESCE(p.media_url, p.image_url) as media_url,
+        COALESCE(p.media_type, 'image') as media_type,
         p.shares_count,
         p.created_at,
         u.username as author,
+        u.avatar_url as author_avatar_url,
         (SELECT count(*)::int FROM likes l WHERE l.post_id = p.id) as likes_count,
         (SELECT count(*)::int FROM comments c WHERE c.post_id = p.id) as comments_count,
         EXISTS (SELECT 1 FROM likes l2 WHERE l2.post_id = p.id AND l2.user_id = $2::uuid) as liked_by_me
@@ -628,6 +635,7 @@ app.patch('/api/posts/:id', async (req, res) => {
     post: {
       id: row.id,
       author: row.author,
+      authorAvatarUrl: row.author_avatar_url || null,
       title: row.title,
       tags: JSON.parse(row.tags || '[]'),
       mediaUrl: row.media_url,

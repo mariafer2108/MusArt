@@ -89,7 +89,13 @@ function PostCard({
     <div className="card post" style={{ padding: 16 }}>
       <div className="post-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
-          <div className="story"><div /></div>
+          {post.authorAvatarUrl ? (
+            <div className="story" style={{ overflow: 'hidden' }}>
+              <img src={post.authorAvatarUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 999 }} />
+            </div>
+          ) : (
+            <div className="story"><div /></div>
+          )}
           <div style={{ minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
               <div style={{ fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>

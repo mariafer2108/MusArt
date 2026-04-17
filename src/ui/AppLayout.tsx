@@ -11,6 +11,7 @@ export type Comment = {
 export type Post = {
   id: string
   author: string
+  authorAvatarUrl: string | null
   title: string
   tags: string[]
   mediaUrl: string
@@ -204,13 +205,26 @@ function AppLayout() {
   }
 
   async function saveMyProfile(input: { username?: string; bio: string; avatarUrl: string | null }) {
-    const r = await api<{ token?: string; user: { bio?: string; avatarUrl?: string | null } }>('/api/me/profile', {
+    const beforeUsername = meUsername
+    const r = await api<{ token?: string; user: { username?: string; bio?: string; avatarUrl?: string | null } }>('/api/me/profile', {
       method: 'PATCH',
       body: JSON.stringify(input)
     })
     if (r.token) setToken(String(r.token))
     setMeBio(String(r.user?.bio ?? ''))
     setMeAvatarUrl(r.user?.avatarUrl ?? null)
+    const afterUsername = String(r.user?.username ?? beforeUsername ?? '')
+    if (beforeUsername && afterUsername) {
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.author === beforeUsername
+            ? { ...p, author: afterUsername, authorAvatarUrl: r.user?.avatarUrl ?? p.authorAvatarUrl }
+            : p
+        )
+      )
+    } else if (beforeUsername) {
+      setPosts((prev) => prev.map((p) => (p.author === beforeUsername ? { ...p, authorAvatarUrl: r.user?.avatarUrl ?? p.authorAvatarUrl } : p)))
+    }
   }
 
   return (
@@ -250,8 +264,18 @@ function AppLayout() {
                 <img src="/logomusart.PNG" alt="MusArt" />
                 <div className="topbar-wordmark">MusArt</div>
               </div>
-              <div className="search">
-                <input className="input" placeholder="Descubre artistas..." />
+              <div className="topbar-right">
+                <div className="search">
+                  <input className="input" placeholder="Descubre artistas..." />
+                </div>
+                <div className="user-chip">
+                  {meAvatarUrl ? (
+                    <img className="user-chip-avatar" src={meAvatarUrl} alt="Tu avatar" />
+                  ) : (
+                    <div className="user-chip-avatar" />
+                  )}
+                  <div className="user-chip-name">{meUsername || '—'}</div>
+                </div>
               </div>
             </div>
             <div className="content">
