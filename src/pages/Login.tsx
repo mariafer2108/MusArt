@@ -8,6 +8,12 @@ function Login() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  function continueAsGuest() {
+    localStorage.removeItem('musart_token')
+    localStorage.removeItem('musart_username')
+    navigate('/app')
+  }
+
   async function submit() {
     setLoading(true)
     setError(null)
@@ -67,6 +73,9 @@ function Login() {
             />
             <button className="button" type="button" onClick={submit} disabled={loading}>
               Iniciar
+            </button>
+            <button className="button ghost" type="button" onClick={continueAsGuest} disabled={loading}>
+              Entrar como invitado
             </button>
             {error ? <div className="pill">{error}</div> : null}
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>

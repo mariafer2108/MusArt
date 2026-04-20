@@ -113,8 +113,10 @@ function AppLayout() {
     if (token) headers.set('Authorization', `Bearer ${token}`)
     const res = await fetch(path, { ...init, headers })
     if (res.status === 401) {
-      setToken(null)
-      navigate('/', { replace: true })
+      if (token) {
+        setToken(null)
+        navigate('/', { replace: true })
+      }
       throw new Error('unauthorized')
     }
     const data = await res.json().catch(() => null)
